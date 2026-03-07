@@ -12,6 +12,12 @@ type Repository interface {
 	UpdateGauge(name string, value float64)
 }
 
+var (
+	ErrUnknownMetricType   = errors.New("unknown metric type")
+	ErrInvalidCounterValue = errors.New("invalid counter value, should be int")
+	ErrInvalidGaugeValue   = errors.New("invalid gauge value, should be float")
+)
+
 type MetricsService struct {
 	repo Repository
 }
@@ -25,7 +31,7 @@ func (svc *MetricsService) Update(metricType, metricName, metricValueRaw string)
 	case models.Counter:
 		metricValue, err := strconv.ParseInt(metricValueRaw, 10, 64)
 		if err != nil {
-			return err
+			return ErrInvalidCounterValue
 		}
 
 		svc.repo.UpdateCounter(metricName, metricValue)
@@ -33,13 +39,13 @@ func (svc *MetricsService) Update(metricType, metricName, metricValueRaw string)
 	case models.Gauge:
 		metricValue, err := strconv.ParseFloat(metricValueRaw, 64)
 		if err != nil {
-			return err
+			return ErrInvalidGaugeValue
 		}
 
 		svc.repo.UpdateGauge(metricName, metricValue)
 
 	default:
-		return errors.New("unknown metric type")
+		return ErrUnknownMetricType
 	}
 
 	return nil

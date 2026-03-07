@@ -26,7 +26,7 @@ func Run(cfg *config.Config) {
 		time.Sleep(cfg.PollInterval)
 
 		if pollCount%reportMultiplier == 0 {
-			Send(metrics, cfg.ServerBaseURL)
+			Send(metrics, cfg.ServerBaseURL())
 		}
 
 	}
