@@ -26,7 +26,7 @@ func Run(cfg *config.Config) {
 		time.Sleep(cfg.PollInterval)
 
 		if pollCount%reportMultiplier == 0 {
-			Send(metrics, cfg.ServerBaseUrl)
+			Send(metrics, cfg.ServerBaseURL)
 		}
 
 	}
@@ -73,6 +73,7 @@ func Poll(metrics Metrics, count int64) {
 }
 
 func Send(metrics Metrics, baseURL string) {
+	log.Println("--- Отправка метрик ---")
 	for name, value := range metrics {
 
 		metricType := "gauge"
