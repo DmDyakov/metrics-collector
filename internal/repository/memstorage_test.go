@@ -7,7 +7,7 @@ import (
 func TestMemStorage_UpdateCounter(t *testing.T) {
 	storage := NewMemStorage()
 
-	storage.UpdateCounter("test", 10)
+	storage.UpdateCounterMetric("test", 10)
 
 	val, exists := storage.counters["test"]
 	if !exists {
@@ -21,7 +21,7 @@ func TestMemStorage_UpdateCounter(t *testing.T) {
 func TestMemStorage_UpdateGauge(t *testing.T) {
 	storage := NewMemStorage()
 
-	storage.UpdateGauge("test", 123.456)
+	storage.UpdateGaugeMetric("test", 123.456)
 
 	val, exists := storage.gauges["test"]
 	if !exists {

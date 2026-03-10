@@ -67,7 +67,7 @@ func TestUpdateMetrics(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, tt.url, nil)
 			w := httptest.NewRecorder()
-			h.UpdateMetrics(w, req)
+			h.UpdateHandle(w, req)
 
 			if w.Code != tt.want.code {
 				t.Errorf("UpdateMetrics() status = %v, want %v", w.Code, tt.want)

@@ -11,20 +11,36 @@ type mockRepository struct {
 		Name  string
 		Value float64
 	}
+	gauges   map[string]float64
+	counters map[string]int64
 }
 
-func (m *mockRepository) UpdateCounter(name string, value int64) {
+func (m *mockRepository) UpdateCounterMetric(name string, value int64) {
 	m.counterCalls = append(m.counterCalls, struct {
 		Name  string
 		Value int64
 	}{name, value})
 }
 
-func (m *mockRepository) UpdateGauge(name string, value float64) {
+func (m *mockRepository) UpdateGaugeMetric(name string, value float64) {
 	m.gaugeCalls = append(m.gaugeCalls, struct {
 		Name  string
 		Value float64
 	}{name, value})
+}
+
+func (m mockRepository) GetAllMetricsRaw() (gauges map[string]float64, counters map[string]int64) {
+	return m.gauges, m.counters
+}
+
+func (m *mockRepository) GetGaugeMetricValue(name string) (float64, bool) {
+	val, ok := m.gauges[name]
+	return val, ok
+}
+
+func (m *mockRepository) GetCountMetricValue(name string) (int64, bool) {
+	val, ok := m.counters[name]
+	return val, ok
 }
 
 func TestMetricsService_Update(t *testing.T) {
@@ -111,7 +127,7 @@ func TestMetricsService_Update(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mockRepo := &mockRepository{}
 			svc := NewMetricsService(mockRepo)
-			err := svc.Update(tt.metricType, tt.metricName, tt.metricValueRaw)
+			err := svc.UpdateMetric(tt.metricType, tt.metricName, tt.metricValueRaw)
 			if err != tt.wantErr {
 				t.Errorf("Update() error = %v, wantErr %v", err, tt.wantErr)
 				t.Logf("Received: type=%s, name=%s, value=%s",
