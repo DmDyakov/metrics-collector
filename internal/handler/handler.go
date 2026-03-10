@@ -20,12 +20,16 @@ func NewHandler(service *service.MetricsService) *Handler {
 	return &Handler{service: service}
 }
 
-var allMetricsHTMLTemplate = template.Must(template.ParseFiles("internal/templates/metrics.html"))
-
 func (h *Handler) RootHandle(res http.ResponseWriter, req *http.Request) {
 	allMetrics, err := h.service.GetAllMetrics()
 	if err != nil {
 		http.Error(res, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	allMetricsHTMLTemplate, err := template.ParseFiles("internal/templates/metrics.html")
+	if err != nil {
+		http.Error(res, "template not found", http.StatusInternalServerError)
 		return
 	}
 

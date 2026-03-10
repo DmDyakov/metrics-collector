@@ -9,14 +9,14 @@ import (
 	"testing"
 )
 
-func TestUpdateMetrics(t *testing.T) {
+func TestUpdateMetric(t *testing.T) {
 	type want struct {
 		code        int
 		response    string
 		contentType string
 	}
 
-	tests := []struct {
+	testTable := []struct {
 		name string
 		url  string
 		want want
@@ -44,7 +44,7 @@ func TestUpdateMetrics(t *testing.T) {
 			url:  "/update/invalid",
 			want: want{
 				code:        http.StatusNotFound,
-				response:    "invalid URL\n",
+				response:    "404 page not found\n",
 				contentType: "text/plain; charset=utf-8",
 			},
 		},
@@ -63,14 +63,16 @@ func TestUpdateMetrics(t *testing.T) {
 	svc := service.NewMetricsService(repo)
 	h := handler.NewHandler(svc)
 
-	for _, tt := range tests {
+	router := h.NewMetricsRouter()
+
+	for _, tt := range testTable {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, tt.url, nil)
 			w := httptest.NewRecorder()
-			h.UpdateHandle(w, req)
+			router.ServeHTTP(w, req)
 
 			if w.Code != tt.want.code {
-				t.Errorf("UpdateMetrics() status = %v, want %v", w.Code, tt.want)
+				t.Errorf("UpdateMetric() status = %v, want %v", w.Code, tt.want)
 			}
 
 			if w.Body.String() != tt.want.response {
