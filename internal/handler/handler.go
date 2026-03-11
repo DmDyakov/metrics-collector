@@ -60,7 +60,14 @@ func (h *Handler) ValueHandle(res http.ResponseWriter, req *http.Request) {
 
 	value, err := h.service.GetMetricValue(metricType, metricName)
 	if err != nil {
-		http.Error(res, err.Error(), http.StatusBadRequest)
+		switch {
+		case err == service.ErrMetricNotFound:
+			http.Error(res, err.Error(), http.StatusNotFound)
+		case err == service.ErrUnknownMetricType:
+			http.Error(res, err.Error(), http.StatusBadRequest)
+		default:
+			http.Error(res, err.Error(), http.StatusBadRequest)
+		}
 		return
 	}
 
