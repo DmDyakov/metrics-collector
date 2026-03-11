@@ -13,7 +13,7 @@ import (
 
 type Metrics map[string]string
 
-func Run(cfg *config.Config) {
+func Run(cfg *config.AgentConfig) {
 	var metrics = make(Metrics)
 	reportMultiplier := int64(cfg.ReportInterval / cfg.PollInterval)
 	var pollCount int64 = 0
@@ -26,7 +26,7 @@ func Run(cfg *config.Config) {
 		time.Sleep(cfg.PollInterval)
 
 		if pollCount%reportMultiplier == 0 {
-			Send(metrics, cfg.ServerBaseURL())
+			Send(metrics, cfg.ServerBaseURL)
 		}
 
 	}

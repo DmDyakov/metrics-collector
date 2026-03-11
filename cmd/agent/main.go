@@ -8,7 +8,14 @@ import (
 
 func main() {
 	log.Println("Starting agent...")
-	cfg := config.NewConfig()
+	cfg, err := config.NewAgentConfig()
+	if err != nil {
+		log.Fatalf("Failed to create agent config: %v", err)
+	}
+
+	if cfg == nil {
+		log.Fatal("Config is nil")
+	}
 
 	agent.Run(cfg)
 

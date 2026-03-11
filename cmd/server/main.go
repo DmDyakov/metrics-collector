@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	cfg := config.NewConfig()
+	cfg := config.NewServerConfig()
 
 	repo := repository.NewMemStorage()
 	svc := service.NewMetricsService(repo)
@@ -19,6 +19,6 @@ func main() {
 
 	r := h.NewMetricsRouter()
 
-	log.Printf("Server started on :%s...", cfg.Port)
-	log.Fatal(http.ListenAndServe(":"+cfg.Port, r))
+	log.Printf("Server started on :%s...", cfg.ServerBaseURL)
+	log.Fatal(http.ListenAndServe(cfg.ServerBaseURL, r))
 }

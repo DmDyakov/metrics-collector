@@ -1,26 +1,61 @@
 package config
 
 import (
-	"fmt"
+	"flag"
 	"time"
 )
 
-type Config struct {
+type AgentConfig struct {
 	PollInterval   time.Duration
 	ReportInterval time.Duration
-	Host           string
-	Port           string
+	ServerBaseURL  string
 }
 
-func NewConfig() *Config {
-	return &Config{
-		PollInterval:   2 * time.Second,
-		ReportInterval: 10 * time.Second,
-		Host:           "localhost",
-		Port:           "8080",
+type ServerConfig struct {
+	ServerBaseURL string
+}
+
+var (
+	flagRunAddr        string
+	flagReportInterval string
+	flagPollInterval   string
+)
+
+func parseFlags() {
+	const (
+		defaultServerBaseURL  = "localhost:8080"
+		defaultPollInterval   = "2s"
+		defaultReportInterval = "10s"
+	)
+
+	flag.StringVar(&flagRunAddr, "a", defaultServerBaseURL, "address and port to run server")
+	flag.StringVar(&flagPollInterval, "p", defaultPollInterval, "poll interval")
+	flag.StringVar(&flagReportInterval, "r", defaultReportInterval, "report interval")
+	flag.Parse()
+}
+
+func NewAgentConfig() (*AgentConfig, error) {
+	parseFlags()
+	pollDur, err := time.ParseDuration(flagPollInterval)
+	if err != nil {
+		return nil, err
 	}
+
+	reportDur, err := time.ParseDuration(flagReportInterval)
+	if err != nil {
+		return nil, err
+	}
+
+	return &AgentConfig{
+		PollInterval:   pollDur,
+		ReportInterval: reportDur,
+		ServerBaseURL:  flagRunAddr,
+	}, nil
 }
 
-func (cfg *Config) ServerBaseURL() string {
-	return fmt.Sprintf("%s:%s", cfg.Host, cfg.Port)
+func NewServerConfig() *ServerConfig {
+	parseFlags()
+	return &ServerConfig{
+		ServerBaseURL: flagRunAddr,
+	}
 }
