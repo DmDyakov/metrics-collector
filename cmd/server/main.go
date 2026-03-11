@@ -19,6 +19,6 @@ func main() {
 
 	r := h.NewMetricsRouter()
 
-	log.Printf("Server started on :%s...", cfg.ServerBaseURL)
+	log.Printf("Server started on %s...", cfg.ServerBaseURL)
 	log.Fatal(http.ListenAndServe(cfg.ServerBaseURL, r))
 }

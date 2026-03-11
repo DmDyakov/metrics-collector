@@ -2,6 +2,7 @@ package config
 
 import (
 	"flag"
+	"strconv"
 	"time"
 )
 
@@ -24,8 +25,8 @@ var (
 func parseFlags() {
 	const (
 		defaultServerBaseURL  = "localhost:8080"
-		defaultPollInterval   = "2s"
-		defaultReportInterval = "10s"
+		defaultPollInterval   = "2"
+		defaultReportInterval = "10"
 	)
 
 	flag.StringVar(&flagRunAddr, "a", defaultServerBaseURL, "address and port to run server")
@@ -36,15 +37,19 @@ func parseFlags() {
 
 func NewAgentConfig() (*AgentConfig, error) {
 	parseFlags()
-	pollDur, err := time.ParseDuration(flagPollInterval)
+
+	pollSec, err := strconv.ParseInt(flagPollInterval, 10, 64)
 	if err != nil {
 		return nil, err
 	}
 
-	reportDur, err := time.ParseDuration(flagReportInterval)
+	reportSec, err := strconv.ParseInt(flagReportInterval, 10, 64)
 	if err != nil {
 		return nil, err
 	}
+
+	pollDur := time.Duration(pollSec) * time.Second
+	reportDur := time.Duration(reportSec) * time.Second
 
 	return &AgentConfig{
 		PollInterval:   pollDur,
