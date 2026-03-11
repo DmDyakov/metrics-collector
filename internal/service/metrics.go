@@ -57,14 +57,14 @@ func (svc *MetricsService) UpdateMetric(metricType, metricName, metricValueRaw s
 
 func (svc *MetricsService) GetMetricValue(metricType, metricName string) (string, error) {
 	switch metricType {
-	case "gauge":
+	case models.Gauge:
 		value, ok := svc.repo.GetGaugeMetricValue(metricName)
 		if !ok {
 			return "", ErrMetricNotFound
 		}
 		return strconv.FormatFloat(value, 'f', -1, 64), nil
 
-	case "count":
+	case models.Counter:
 		value, ok := svc.repo.GetCountMetricValue(metricName)
 		if !ok {
 			return "", ErrMetricNotFound
