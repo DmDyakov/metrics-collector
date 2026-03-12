@@ -1,33 +1,24 @@
 package repository
 
 import (
+	models "metrics-collector/internal/model"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
-func TestMemStorage_UpdateCounter(t *testing.T) {
-	storage := NewMemStorage()
+func TestMemStorage_UpdateMetric(t *testing.T) {
+	ms := NewMemStorage()
 
-	storage.UpdateCounterMetric("test", 10)
-
-	val, exists := storage.counters["test"]
-	if !exists {
-		t.Error("counter 'test' not found")
+	testValue := 42.5
+	testMetric := models.Metrics{
+		ID:    "test_name",
+		MType: "test_type",
+		Value: &testValue,
 	}
-	if val != 10 {
-		t.Errorf("got %d, want 10", val)
-	}
-}
 
-func TestMemStorage_UpdateGauge(t *testing.T) {
-	storage := NewMemStorage()
+	ms.UpdateMetric(testMetric)
 
-	storage.UpdateGaugeMetric("test", 123.456)
-
-	val, exists := storage.gauges["test"]
-	if !exists {
-		t.Error("gauge 'test' not found")
-	}
-	if val != 123.456 {
-		t.Errorf("got %f, want 123.456", val)
-	}
+	assert.Len(t, ms.metrics, 1)
+	assert.Equal(t, testMetric, ms.metrics["test_name"])
 }

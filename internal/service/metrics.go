@@ -8,14 +8,13 @@ import (
 )
 
 type Repository interface {
-	GetAllMetricsRaw() (gauges map[string]float64, counters map[string]int64)
-	UpdateCounterMetric(name string, value int64)
-	UpdateGaugeMetric(name string, value float64)
-	GetGaugeMetricValue(name string) (float64, bool)
-	GetCountMetricValue(name string) (int64, bool)
+	GetAllMetrics() map[string]models.Metrics
+	GetMetric(metricName string) (models.Metrics, bool)
+	UpdateMetric(metric models.Metrics)
 }
 
 var (
+	ErrMetricTypeMismatch  = errors.New("metric type mismatch")
 	ErrUnknownMetricType   = errors.New("unknown metric type")
 	ErrMetricNotFound      = errors.New("metric not found")
 	ErrInvalidCounterValue = errors.New("invalid counter value, should be int")
@@ -30,23 +29,35 @@ func NewMetricsService(repo Repository) *MetricsService {
 	return &MetricsService{repo: repo}
 }
 
-func (svc *MetricsService) UpdateMetric(metricType, metricName, metricValueRaw string) error {
+func (svc *MetricsService) UpdateMetric(metricType, metricName, metricValue string) error {
 	switch metricType {
 	case models.Counter:
-		metricValue, err := strconv.ParseInt(metricValueRaw, 10, 64)
+		delta, err := strconv.ParseInt(metricValue, 10, 64)
 		if err != nil {
 			return ErrInvalidCounterValue
 		}
 
-		svc.repo.UpdateCounterMetric(metricName, metricValue)
+		metric := models.Metrics{
+			ID:    metricName,
+			MType: models.Counter,
+			Delta: &delta,
+		}
+
+		svc.repo.UpdateMetric(metric)
 
 	case models.Gauge:
-		metricValue, err := strconv.ParseFloat(metricValueRaw, 64)
+		value, err := strconv.ParseFloat(metricValue, 64)
 		if err != nil {
 			return ErrInvalidGaugeValue
 		}
 
-		svc.repo.UpdateGaugeMetric(metricName, metricValue)
+		metric := models.Metrics{
+			ID:    metricName,
+			MType: models.Gauge,
+			Value: &value,
+		}
+
+		svc.repo.UpdateMetric(metric)
 
 	default:
 		return ErrUnknownMetricType
@@ -56,37 +67,47 @@ func (svc *MetricsService) UpdateMetric(metricType, metricName, metricValueRaw s
 }
 
 func (svc *MetricsService) GetMetricValue(metricType, metricName string) (string, error) {
+	metric, ok := svc.repo.GetMetric(metricName)
+	if !ok {
+		return "", ErrMetricNotFound
+	}
+
+	if metric.MType != metricType {
+		return "", ErrMetricTypeMismatch
+	}
+
 	switch metricType {
 	case models.Gauge:
-		value, ok := svc.repo.GetGaugeMetricValue(metricName)
-		if !ok {
-			return "", ErrMetricNotFound
+		if metric.Value == nil {
+			return "", ErrInvalidGaugeValue
 		}
-		return strconv.FormatFloat(value, 'f', -1, 64), nil
-
+		return strconv.FormatFloat(*metric.Value, 'f', -1, 64), nil
 	case models.Counter:
-		value, ok := svc.repo.GetCountMetricValue(metricName)
-		if !ok {
-			return "", ErrMetricNotFound
+		if metric.Delta == nil {
+			return "", ErrInvalidCounterValue
 		}
-		return strconv.FormatInt(value, 10), nil
-
+		return strconv.FormatInt(*metric.Delta, 10), nil
 	default:
 		return "", ErrUnknownMetricType
 	}
 }
 
 func (svc *MetricsService) GetAllMetrics() (map[string]string, error) {
-	gauges, counters := svc.repo.GetAllMetricsRaw()
+	metrics := svc.repo.GetAllMetrics()
 
-	allMetrics := make(map[string]string)
+	allMetrics := make(map[string]string, len(metrics))
 
-	for name, value := range gauges {
-		allMetrics[name] = strconv.FormatFloat(value, 'f', -1, 64)
-	}
-
-	for name, value := range counters {
-		allMetrics[name] = strconv.FormatInt(value, 10)
+	for name, metric := range metrics {
+		switch metric.MType {
+		case models.Gauge:
+			if metric.Value != nil {
+				allMetrics[name] = strconv.FormatFloat(*metric.Value, 'f', -1, 64)
+			}
+		case models.Counter:
+			if metric.Delta != nil {
+				allMetrics[name] = strconv.FormatInt(*metric.Delta, 10)
+			}
+		}
 	}
 
 	return allMetrics, nil

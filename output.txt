@@ -1,0 +1,1524 @@
+=== ./cmd/server/README.md ===
+# cmd/server
+
+В данной директории будет содержаться код Сервера, который скомпилируется в бинарное приложение.
+
+
+=== ./cmd/server/main.go ===
+package main
+
+import (
+	"log"
+	"net/http"
+
+	"metrics-collector/internal/config"
+	"metrics-collector/internal/handler"
+	"metrics-collector/internal/repository"
+	"metrics-collector/internal/service"
+)
+
+func main() {
+	cfg := config.NewServerConfig()
+
+	repo := repository.NewMemStorage()
+	svc := service.NewMetricsService(repo)
+	h := handler.NewHandler(svc)
+
+	r := h.NewMetricsRouter()
+
+	log.Printf("Server started on %s...", cfg.ServerBaseURL)
+	log.Fatal(http.ListenAndServe(cfg.ServerBaseURL, r))
+}
+
+
+=== ./cmd/agent/README.md ===
+# cmd/agent
+
+В данной директории будет содержаться код Агента, который скомпилируется в бинарное приложение.
+
+
+=== ./cmd/agent/main.go ===
+package main
+
+import (
+	"log"
+	"metrics-collector/internal/agent"
+	"metrics-collector/internal/config"
+)
+
+func main() {
+	log.Println("Starting agent...")
+	cfg, err := config.NewAgentConfig()
+	if err != nil {
+		log.Fatalf("Failed to create agent config: %v", err)
+	}
+
+	if cfg == nil {
+		log.Fatal("Config is nil")
+	}
+
+	agent.Run(cfg)
+
+}
+
+
+=== ./cmd/README.md ===
+# cmd
+
+В данной директории содержится код, который скомпилируется в бинарное приложение.
+
+Рекомендуется помещать только код, необходимый для запуска приложения, но не бизнес-логику.
+
+Название директории должно соответствовать названию приложения.
+
+Директория `cmd/app_name` содержит:
+- точку входа в приложение (функция `main`)
+- инициализацию зависимостей (можно вынести в отдельный пакет `internal/app`)
+- настройку и запуск HTTP-сервера (можно вынести в отдельный пакет `internal/router`)
+- обработку сигналов завершения работы приложения
+
+=== ./migrations/README.md ===
+# migrations
+
+В данной директории содержатся файлы миграций базы данных.
+
+Миграции базы данных — это скрипты, которые позволяют:
+
+- версионировать изменения схемы базы данных
+- применять изменения в правильном порядке
+- откатывать изменения при необходимости
+
+Тема миграций будет подробно изучаться дальше по курсу.
+
+
+=== ./go.mod ===
+module metrics-collector
+
+go 1.24.0
+
+require (
+	github.com/go-chi/chi/v5 v5.2.5
+	github.com/stretchr/testify v1.11.1
+)
+
+require (
+	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
+)
+
+
+=== ./internal/handler/handler.go ===
+package handler
+
+import (
+	"bytes"
+	"html/template"
+	"io"
+	"net/http"
+
+	"metrics-collector/internal/service"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+)
+
+type Handler struct {
+	service *service.MetricsService
+}
+
+func NewHandler(service *service.MetricsService) *Handler {
+	return &Handler{service: service}
+}
+
+func (h *Handler) RootHandle(res http.ResponseWriter, req *http.Request) {
+	allMetrics, err := h.service.GetAllMetrics()
+	if err != nil {
+		http.Error(res, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	allMetricsHTMLTemplate, err := template.ParseFiles("internal/templates/metrics.html")
+	if err != nil {
+		http.Error(res, "template not found", http.StatusInternalServerError)
+		return
+	}
+
+	var buf bytes.Buffer
+	if err := allMetricsHTMLTemplate.Execute(&buf, allMetrics); err != nil {
+		http.Error(res, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	res.Header().Set("Content-Type", "text/html; charset=utf-8")
+	res.WriteHeader(http.StatusOK)
+	buf.WriteTo(res)
+}
+
+func (h *Handler) ValueHandle(res http.ResponseWriter, req *http.Request) {
+	metricType := chi.URLParam(req, "type")
+	metricName := chi.URLParam(req, "name")
+
+	if metricType == "" {
+		http.Error(res, "metric type is required", http.StatusNotFound)
+		return
+	}
+
+	if metricName == "" {
+		http.Error(res, "metric name is required", http.StatusNotFound)
+		return
+	}
+
+	value, err := h.service.GetMetricValue(metricType, metricName)
+	if err != nil {
+		switch {
+		case err == service.ErrMetricNotFound:
+			http.Error(res, err.Error(), http.StatusNotFound)
+		case err == service.ErrUnknownMetricType:
+			http.Error(res, err.Error(), http.StatusBadRequest)
+		default:
+			http.Error(res, err.Error(), http.StatusBadRequest)
+		}
+		return
+	}
+
+	res.WriteHeader(http.StatusOK)
+	io.WriteString(res, value)
+
+}
+
+func (h *Handler) UpdateHandle(res http.ResponseWriter, req *http.Request) {
+	metricType := chi.URLParam(req, "type")
+	metricName := chi.URLParam(req, "name")
+	metricValue := chi.URLParam(req, "value")
+
+	if metricType == "" {
+		http.Error(res, "metric type is required", http.StatusNotFound)
+		return
+	}
+
+	if metricName == "" {
+		http.Error(res, "metric name is required", http.StatusNotFound)
+		return
+	}
+
+	if metricValue == "" {
+		http.Error(res, "metric value is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.service.UpdateMetric(metricType, metricName, metricValue); err != nil {
+		http.Error(res, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	res.WriteHeader(http.StatusOK)
+}
+
+func (h *Handler) NewMetricsRouter() chi.Router {
+	r := chi.NewRouter()
+	r.Use(middleware.Logger)
+
+	r.Route("/", func(r chi.Router) {
+		r.Get("/", h.RootHandle)                     // GET /
+		r.Get("/value/{type}/{name}", h.ValueHandle) // GET /value/gauge/RandomValue
+	})
+	r.Post("/update/{type}/{name}/{value}", h.UpdateHandle) // POST /value/gauge/RandomValue/123.456
+	return r
+}
+
+
+=== ./internal/handler/README.md ===
+# internal/handler
+
+В этом пакете размещаются обработчики HTTP-запросов. Здесь инкапсулируется так называемая логика представления.
+
+Обычно хэндлеры реализуют:
+- логику обработки запросов
+- валидацию данных
+- вызовы сервисов, в которых содержится бизнес-логика приложения
+- формирование HTTP-ответов
+
+Рекомендуется разбивать хэндлеры по функциональным группам и следовать принципу, где хэндлеры являются адаптерами между HTTP-транспортом и бизнес-логикой приложения.
+
+=== ./internal/handler/handler_test.go ===
+package handler_test
+
+import (
+	"metrics-collector/internal/handler"
+	"metrics-collector/internal/repository"
+	"metrics-collector/internal/service"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+)
+
+func TestUpdateMetric(t *testing.T) {
+	type want struct {
+		code        int
+		response    string
+		contentType string
+	}
+
+	testTable := []struct {
+		name string
+		url  string
+		want want
+	}{
+		{
+			name: "positive test #1 - update counter metric",
+			url:  "/update/counter/testPollCount/1",
+			want: want{
+				code:        http.StatusOK,
+				response:    "",
+				contentType: "",
+			},
+		},
+		{
+			name: "positive test #2 - update gauge metric",
+			url:  "/update/gauge/testRandomValue/123.456",
+			want: want{
+				code:        http.StatusOK,
+				response:    "",
+				contentType: "",
+			},
+		},
+		{
+			name: "invalid URL format",
+			url:  "/update/invalid",
+			want: want{
+				code:        http.StatusNotFound,
+				response:    "404 page not found\n",
+				contentType: "text/plain; charset=utf-8",
+			},
+		},
+		{
+			name: "unknown metric type",
+			url:  "/update/unknown/test/123",
+			want: want{
+				code:        http.StatusBadRequest,
+				response:    "unknown metric type\n",
+				contentType: "text/plain; charset=utf-8",
+			},
+		},
+	}
+
+	repo := repository.NewMemStorage()
+	svc := service.NewMetricsService(repo)
+	h := handler.NewHandler(svc)
+
+	router := h.NewMetricsRouter()
+
+	for _, tt := range testTable {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, tt.url, nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			if w.Code != tt.want.code {
+				t.Errorf("UpdateMetric() status = %v, want %v", w.Code, tt.want)
+			}
+
+			if w.Body.String() != tt.want.response {
+				t.Errorf("response body = %q, want %q", w.Body.String(), tt.want.response)
+			}
+
+			if tt.want.contentType != "" {
+				if ct := w.Header().Get("Content-Type"); ct != tt.want.contentType {
+					t.Errorf("Content-Type = %q, want %q", ct, tt.want.contentType)
+				}
+			}
+		})
+	}
+}
+
+
+=== ./internal/repository/memstorage_test.go ===
+package repository
+
+import (
+	models "metrics-collector/internal/model"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
+
+func TestMemStorage_UpdateMetric(t *testing.T) {
+	ms := NewMemStorage()
+
+	testValue := 42.5
+	testMetric := models.Metrics{
+		ID:    "test_name",
+		MType: "test_type",
+		Value: &testValue,
+	}
+
+	ms.UpdateMetric(testMetric)
+
+	assert.Len(t, ms.metrics, 1)
+	assert.Equal(t, testMetric, ms.metrics["test_name"])
+}
+
+
+=== ./internal/repository/README.md ===
+# internal/repository
+
+Этот пакет содержит реализацию работы с базой данных, а также со внешними сервисами.
+
+Важно, чтобы репозиторий не содержал бизнес-логику.
+
+Репозиторий реализует паттерн Repository и служит абстракцией над различными источниками данных, такими как:
+- базы данных (PostgreSQL, MySQL и др.)
+- внешние API
+- файловые системы
+- кэши (Redis, Memcached)
+- другие источники данных.
+
+
+=== ./internal/repository/memstorage.go ===
+package repository
+
+import models "metrics-collector/internal/model"
+
+type MemStorage struct {
+	metrics map[string]models.Metrics
+}
+
+func (ms MemStorage) GetAllMetrics() map[string]models.Metrics {
+	metrics := make(map[string]models.Metrics)
+	for metricName, metric := range ms.metrics {
+		metrics[metricName] = copyMetric(metric)
+	}
+	return metrics
+}
+
+func (ms *MemStorage) GetMetric(metricName string) (models.Metrics, bool) {
+	metric, ok := ms.metrics[metricName]
+	return copyMetric(metric), ok
+}
+
+func (ms *MemStorage) UpdateMetric(metric models.Metrics) {
+	ms.metrics[metric.ID] = metric
+}
+
+func NewMemStorage() *MemStorage {
+	return &MemStorage{
+		metrics: make(map[string]models.Metrics),
+	}
+}
+
+func copyMetric(m models.Metrics) models.Metrics {
+	copy := models.Metrics{
+		ID:    m.ID,
+		MType: m.MType,
+		Hash:  m.Hash,
+	}
+
+	if m.Delta != nil {
+		delta := *m.Delta
+		copy.Delta = &delta
+	}
+
+	if m.Value != nil {
+		val := *m.Value
+		copy.Value = &val
+	}
+
+	return copy
+}
+
+
+=== ./internal/config/config.go ===
+package config
+
+import (
+	"flag"
+	"strconv"
+	"time"
+)
+
+type AgentConfig struct {
+	PollInterval   time.Duration
+	ReportInterval time.Duration
+	ServerBaseURL  string
+}
+
+type ServerConfig struct {
+	ServerBaseURL string
+}
+
+var (
+	flagServerBaseURL  string
+	flagReportInterval string
+	flagPollInterval   string
+)
+
+func parseFlags() {
+	const (
+		defaultServerBaseURL  = "localhost:8080"
+		defaultPollInterval   = "2"
+		defaultReportInterval = "10"
+	)
+
+	flag.StringVar(&flagServerBaseURL, "a", defaultServerBaseURL, "address and port to run server")
+	flag.StringVar(&flagPollInterval, "p", defaultPollInterval, "poll interval")
+	flag.StringVar(&flagReportInterval, "r", defaultReportInterval, "report interval")
+	flag.Parse()
+}
+
+func NewAgentConfig() (*AgentConfig, error) {
+	parseFlags()
+
+	pollSec, err := strconv.ParseInt(flagPollInterval, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	reportSec, err := strconv.ParseInt(flagReportInterval, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	pollDur := time.Duration(pollSec) * time.Second
+	reportDur := time.Duration(reportSec) * time.Second
+
+	return &AgentConfig{
+		PollInterval:   pollDur,
+		ReportInterval: reportDur,
+		ServerBaseURL:  flagServerBaseURL,
+	}, nil
+}
+
+func NewServerConfig() *ServerConfig {
+	parseFlags()
+	return &ServerConfig{
+		ServerBaseURL: flagServerBaseURL,
+	}
+}
+
+
+=== ./internal/config/README.md ===
+# internal/config
+
+В этом пакете хранятся конфигурации приложения.
+
+Загрузку конфигурации можно реализовать из различных источников, например: файлов, переменных окружения, баз данных и других.
+
+
+=== ./internal/config/db/README.md ===
+# internal/config/db
+
+Описание конфигурации подключения к базе данных.
+
+Этот пакет содержит:
+- структуры конфигурации для подключения к БД
+- параметры соединения и пула подключений
+- настройки для различных типов баз данных
+- логику инициализации подключения
+
+=== ./internal/agent/README.md ===
+# internal/agent
+
+
+
+=== ./internal/agent/agent.go ===
+package agent
+
+import (
+	"fmt"
+	"log"
+	"math/rand/v2"
+	"net/http"
+	"runtime"
+	"time"
+
+	"metrics-collector/internal/config"
+)
+
+type Metrics map[string]string
+
+func Run(cfg *config.AgentConfig) {
+	var metrics = make(Metrics)
+	reportMultiplier := int64(cfg.ReportInterval / cfg.PollInterval)
+	var pollCount int64 = 0
+
+	for {
+
+		pollCount++
+
+		Poll(metrics, pollCount)
+		time.Sleep(cfg.PollInterval)
+
+		if pollCount%reportMultiplier == 0 {
+			Send(metrics, cfg.ServerBaseURL)
+		}
+
+	}
+
+}
+
+func Poll(metrics Metrics, count int64) {
+	log.Printf("--- Опрос метрик #%d ---\n", count)
+
+	var memStats runtime.MemStats
+
+	runtime.ReadMemStats(&memStats)
+
+	metrics["PollCount"] = fmt.Sprintf("%d", count)
+	metrics["RandomValue"] = fmt.Sprintf("%f", rand.Float64())
+
+	metrics["Alloc"] = fmt.Sprintf("%f", float64(memStats.Alloc))
+	metrics["BuckHashSys"] = fmt.Sprintf("%f", float64(memStats.BuckHashSys))
+	metrics["Frees"] = fmt.Sprintf("%f", float64(memStats.Frees))
+	metrics["GCCPUFraction"] = fmt.Sprintf("%f", memStats.GCCPUFraction)
+	metrics["GCSys"] = fmt.Sprintf("%f", float64(memStats.GCSys))
+	metrics["HeapAlloc"] = fmt.Sprintf("%f", float64(memStats.HeapAlloc))
+	metrics["HeapIdle"] = fmt.Sprintf("%f", float64(memStats.HeapIdle))
+	metrics["HeapInuse"] = fmt.Sprintf("%f", float64(memStats.HeapInuse))
+	metrics["HeapObjects"] = fmt.Sprintf("%f", float64(memStats.HeapObjects))
+	metrics["HeapReleased"] = fmt.Sprintf("%f", float64(memStats.HeapReleased))
+	metrics["HeapSys"] = fmt.Sprintf("%f", float64(memStats.HeapSys))
+	metrics["LastGC"] = fmt.Sprintf("%f", float64(memStats.LastGC))
+	metrics["Lookups"] = fmt.Sprintf("%f", float64(memStats.Lookups))
+	metrics["MCacheInuse"] = fmt.Sprintf("%f", float64(memStats.MCacheInuse))
+	metrics["MCacheSys"] = fmt.Sprintf("%f", float64(memStats.MCacheSys))
+	metrics["MSpanInuse"] = fmt.Sprintf("%f", float64(memStats.MSpanInuse))
+	metrics["MSpanSys"] = fmt.Sprintf("%f", float64(memStats.MSpanSys))
+	metrics["Mallocs"] = fmt.Sprintf("%f", float64(memStats.Mallocs))
+	metrics["NextGC"] = fmt.Sprintf("%f", float64(memStats.NextGC))
+	metrics["NumForcedGC"] = fmt.Sprintf("%f", float64(memStats.NumForcedGC))
+	metrics["NumGC"] = fmt.Sprintf("%f", float64(memStats.NumGC))
+	metrics["OtherSys"] = fmt.Sprintf("%f", float64(memStats.OtherSys))
+	metrics["PauseTotalNs"] = fmt.Sprintf("%f", float64(memStats.PauseTotalNs))
+	metrics["StackInuse"] = fmt.Sprintf("%f", float64(memStats.StackInuse))
+	metrics["StackSys"] = fmt.Sprintf("%f", float64(memStats.StackSys))
+	metrics["Sys"] = fmt.Sprintf("%f", float64(memStats.Sys))
+	metrics["TotalAlloc"] = fmt.Sprintf("%f", float64(memStats.TotalAlloc))
+}
+
+func Send(metrics Metrics, baseURL string) {
+	log.Println("--- Отправка метрик ---")
+	for name, value := range metrics {
+
+		metricType := "gauge"
+		if name == "PollCount" {
+			metricType = "counter"
+		}
+
+		url := fmt.Sprintf("http://%s/update/%s/%s/%s", baseURL, metricType, name, value)
+		resp, err := http.Post(url, "text/plain", nil)
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+		resp.Body.Close()
+
+		fmt.Printf("Response status: %s\n", resp.Status)
+
+	}
+
+}
+
+
+=== ./internal/agent/agent_test.go ===
+package agent
+
+import "testing"
+
+func TestPoll_AllMetricsPresent(t *testing.T) {
+	metrics := make(Metrics)
+	Poll(metrics, 1)
+
+	expectedMetrics := []string{
+		"PollCount",
+		"RandomValue",
+		"Alloc",
+		"BuckHashSys",
+		"Frees",
+		"GCCPUFraction",
+		"GCSys",
+		"HeapAlloc",
+		"HeapIdle",
+		"HeapInuse",
+		"HeapObjects",
+		"HeapReleased",
+		"HeapSys",
+		"LastGC",
+		"Lookups",
+		"MCacheInuse",
+		"MCacheSys",
+		"MSpanInuse",
+		"MSpanSys",
+		"Mallocs",
+		"NextGC",
+		"NumForcedGC",
+		"NumGC",
+		"OtherSys",
+		"PauseTotalNs",
+		"StackInuse",
+		"StackSys",
+		"Sys",
+		"TotalAlloc",
+	}
+
+	for _, name := range expectedMetrics {
+		if _, ok := metrics[name]; !ok {
+			t.Errorf("metric %q not found after Poll()", name)
+		}
+	}
+}
+
+
+=== ./internal/README.md ===
+# internal
+
+В этой директории размещается код внутренних модулей приложения. Код внутри этого пакета недоступен для импорта в других приложениях.
+
+Структуру дирктории `internal/` можно разбивать по логическим блокам приложения, выделяя пакеты по функциональному назначению. 
+Например, `internal/agent`, `internal/server` и т.д.
+
+Директория `internal/` является специальной в Go и обеспечивает инкапсуляцию кода на уровне модуля. Компилятор Go запрещает импорт пакетов из `internal/` за пределами родительского модуля.
+
+
+=== ./internal/model/metrics.go ===
+package models
+
+const (
+	Counter = "counter"
+	Gauge   = "gauge"
+)
+
+// NOTE: Не усложняем пример, вводя иерархическую вложенность структур.
+// Органичиваясь плоской моделью.
+// Delta и Value объявлены через указатели,
+// что бы отличать значение "0", от не заданного значения
+// и соответственно не кодировать в структуру.
+type Metrics struct {
+	ID    string   `json:"id"`
+	MType string   `json:"type"`
+	Delta *int64   `json:"delta,omitempty"`
+	Value *float64 `json:"value,omitempty"`
+	Hash  string   `json:"hash,omitempty"`
+}
+
+
+=== ./internal/model/README.md ===
+# internal/model
+
+В этом пакете содержатся структуры данных, которые описывают основные сущности предметной области приложения.
+
+Эти структуры используются в сервисах и хэндлерах. Данный пакет не должен содержать бизнес-логику приложения.
+
+
+=== ./internal/templates/metrics.html ===
+<!DOCTYPE html>
+    <html>
+    <head>
+        <title>Метрики</title>
+    </head>
+    <body>
+        <h1>Список метрик</h1>
+        {{ if . }}
+        <ul>
+            {{ range $name, $value := . }}
+            <li>{{ $name }}: {{ $value }}</li>
+            {{ end }}
+        </ul>
+        {{ else }}
+        <p>Метрики не найдены</p>
+        {{ end }}
+    </body>
+    </html>
+
+=== ./internal/service/metrics.go ===
+package service
+
+import (
+	"errors"
+	"strconv"
+
+	models "metrics-collector/internal/model"
+)
+
+type Repository interface {
+	GetAllMetrics() map[string]models.Metrics
+	GetMetric(metricName string) (models.Metrics, bool)
+	UpdateMetric(metric models.Metrics)
+}
+
+var (
+	ErrMetricTypeMismatch  = errors.New("metric type mismatch")
+	ErrUnknownMetricType   = errors.New("unknown metric type")
+	ErrMetricNotFound      = errors.New("metric not found")
+	ErrInvalidCounterValue = errors.New("invalid counter value, should be int")
+	ErrInvalidGaugeValue   = errors.New("invalid gauge value, should be float")
+)
+
+type MetricsService struct {
+	repo Repository
+}
+
+func NewMetricsService(repo Repository) *MetricsService {
+	return &MetricsService{repo: repo}
+}
+
+func (svc *MetricsService) UpdateMetric(metricType, metricName, metricValue string) error {
+	switch metricType {
+	case models.Counter:
+		delta, err := strconv.ParseInt(metricValue, 10, 64)
+		if err != nil {
+			return ErrInvalidCounterValue
+		}
+
+		metric := models.Metrics{
+			ID:    metricName,
+			MType: models.Counter,
+			Delta: &delta,
+		}
+
+		svc.repo.UpdateMetric(metric)
+
+	case models.Gauge:
+		value, err := strconv.ParseFloat(metricValue, 64)
+		if err != nil {
+			return ErrInvalidGaugeValue
+		}
+
+		metric := models.Metrics{
+			ID:    metricName,
+			MType: models.Gauge,
+			Value: &value,
+		}
+
+		svc.repo.UpdateMetric(metric)
+
+	default:
+		return ErrUnknownMetricType
+	}
+
+	return nil
+}
+
+func (svc *MetricsService) GetMetricValue(metricType, metricName string) (string, error) {
+	metric, ok := svc.repo.GetMetric(metricName)
+	if !ok {
+		return "", ErrMetricNotFound
+	}
+
+	if metric.MType != metricType {
+		return "", ErrMetricTypeMismatch
+	}
+
+	switch metricType {
+	case models.Gauge:
+		if metric.Value == nil {
+			return "", ErrInvalidGaugeValue
+		}
+		return strconv.FormatFloat(*metric.Value, 'f', -1, 64), nil
+	case models.Counter:
+		if metric.Delta == nil {
+			return "", ErrInvalidCounterValue
+		}
+		return strconv.FormatInt(*metric.Delta, 10), nil
+	default:
+		return "", ErrUnknownMetricType
+	}
+}
+
+func (svc *MetricsService) GetAllMetrics() (map[string]string, error) {
+	metrics := svc.repo.GetAllMetrics()
+
+	allMetrics := make(map[string]string, len(metrics))
+
+	for name, metric := range metrics {
+		switch metric.MType {
+		case models.Gauge:
+			if metric.Value != nil {
+				allMetrics[name] = strconv.FormatFloat(*metric.Value, 'f', -1, 64)
+			}
+		case models.Counter:
+			if metric.Delta != nil {
+				allMetrics[name] = strconv.FormatInt(*metric.Delta, 10)
+			}
+		}
+	}
+
+	return allMetrics, nil
+
+}
+
+
+=== ./internal/service/metrics_test.go ===
+package service
+
+import (
+	models "metrics-collector/internal/model"
+	"testing"
+)
+
+type mockRepository struct {
+	data map[string]models.Metrics
+}
+
+func newMockRepository() *mockRepository {
+	return &mockRepository{
+		data: make(map[string]models.Metrics),
+	}
+}
+
+func (m *mockRepository) GetAllMetrics() map[string]models.Metrics {
+	return m.data
+}
+
+func (m *mockRepository) GetMetric(name string) (models.Metrics, bool) {
+	metric, ok := m.data[name]
+	return metric, ok
+}
+
+func (m *mockRepository) UpdateMetric(metric models.Metrics) {
+	m.data[metric.ID] = metric
+}
+
+func TestUpdateMetric(t *testing.T) {
+	tests := []struct {
+		name      string
+		mType     string
+		mName     string
+		mValue    string
+		expectErr error
+		expectKey string
+	}{
+		{
+			name:      "valid gauge",
+			mType:     models.Gauge,
+			mName:     "Alloc",
+			mValue:    "10.5",
+			expectErr: nil,
+			expectKey: "Alloc",
+		},
+		{
+			name:      "valid counter",
+			mType:     models.Counter,
+			mName:     "PollCount",
+			mValue:    "5",
+			expectErr: nil,
+			expectKey: "PollCount",
+		},
+		{
+			name:      "invalid counter value",
+			mType:     models.Counter,
+			mName:     "PollCount",
+			mValue:    "abc",
+			expectErr: ErrInvalidCounterValue,
+		},
+		{
+			name:      "invalid gauge value",
+			mType:     models.Gauge,
+			mName:     "Alloc",
+			mValue:    "abc",
+			expectErr: ErrInvalidGaugeValue,
+		},
+		{
+			name:      "unknown type",
+			mType:     "unknown",
+			mName:     "Metric",
+			mValue:    "1",
+			expectErr: ErrUnknownMetricType,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+
+			repo := newMockRepository()
+			svc := NewMetricsService(repo)
+
+			err := svc.UpdateMetric(tt.mType, tt.mName, tt.mValue)
+
+			if err != tt.expectErr {
+				t.Fatalf("expected error %v, got %v", tt.expectErr, err)
+			}
+
+			if tt.expectErr == nil {
+				if _, ok := repo.data[tt.expectKey]; !ok {
+					t.Fatalf("metric not saved in repo")
+				}
+			}
+
+		})
+	}
+}
+
+
+=== ./internal/service/README.md ===
+# internal/service
+
+Пакет `service` содержит бизнес-логику и играет ключевую роль в реализации функциональности приложения.
+
+В нём описаны правила, процессы и операции, которые определяют поведение приложения.
+
+Принципы организации:
+- Сервисы должны быть независимы от деталей транспорта (HTTP, gRPC и т.д.).
+- Взаимодействие с базой данных происходит через интерфейсы репозиториев.
+- Каждый сервис должен иметь четко определенную область ответственности.
+
+
+=== ./go.sum ===
+github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
+github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/go-chi/chi/v5 v5.2.5 h1:Eg4myHZBjyvJmAFjFvWgrqDTXFyOzjj7YIm3L3mu6Ug=
+github.com/go-chi/chi/v5 v5.2.5/go.mod h1:X7Gx4mteadT3eDOMTsXzmI4/rwUpOwBHLpAfupzFJP0=
+github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
+github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
+github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
+github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
+gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405 h1:yhCVgyC4o1eVCa2tZl7eS0r+SDo693bJlVdllGtEeKM=
+gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
+gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
+gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
+
+
+=== ./README.md ===
+# go-musthave-metrics-tpl
+
+Шаблон репозитория для трека «Сервер сбора метрик и алертинга».
+
+## Начало работы
+
+1. Склонируйте репозиторий в любую подходящую директорию на вашем компьютере.
+2. В корне репозитория выполните команду `go mod init <name>` (где `<name>` — адрес вашего репозитория на GitHub без префикса `https://`) для создания модуля.
+
+## Обновление шаблона
+
+Чтобы иметь возможность получать обновления автотестов и других частей шаблона, выполните команду:
+
+```
+git remote add -m v2 template https://github.com/Yandex-Practicum/go-musthave-metrics-tpl.git
+```
+
+Для обновления кода автотестов выполните команду:
+
+```
+git fetch template && git checkout template/v2 .github
+```
+
+Затем добавьте полученные изменения в свой репозиторий.
+
+## Запуск автотестов
+
+Для успешного запуска автотестов называйте ветки `iter<number>`, где `<number>` — порядковый номер инкремента. Например, в ветке с названием `iter4` запустятся автотесты для инкрементов с первого по четвёртый.
+
+При мёрже ветки с инкрементом в основную ветку `main` будут запускаться все автотесты.
+
+Подробнее про локальный и автоматический запуск читайте в [README автотестов](https://github.com/Yandex-Practicum/go-autotests).
+
+## Структура проекта
+
+Приведённая в этом репозитории структура проекта является рекомендуемой, но не обязательной.
+
+Это лишь пример организации кода, который поможет вам в реализации сервиса.
+
+При необходимости можно вносить изменения в структуру проекта, использовать любые библиотеки и предпочитаемые структурные паттерны организации кода приложения, например:
+- **DDD** (Domain-Driven Design)
+- **Clean Architecture**
+- **Hexagonal Architecture**
+- **Layered Architecture**
+
+## Запустить сервер локально
+go run cmd/server/main.go
+
+## Запустить агент локально
+go run cmd/agent/main.go
+
+
+=== ./.gitignore ===
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Binaries
+cmd/agent/main
+cmd/agent/agent
+cmd/server/main
+cmd/server/server
+
+# Dependency directories (remove the comment below to include it)
+vendor/
+
+# IDEs directories
+.idea
+.vscode
+
+
+=== ./.github/workflows/mertricstest.yml ===
+name: autotests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+
+  branchtest:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check branch name
+        run: |
+          if [[ ! $GITHUB_HEAD_REF =~ ^iter[0-9]+$ ]] && [[ ${{ github.ref }} != "refs/heads/main" ]]; then echo "Branch name must match pattern 'iter<number>' or github.ref must be 'refs/heads/main'" && echo "Your branch is $GITHUB_HEAD_REF and github.ref is ${{ github.ref }}" && exit 1; else echo "Your branch is $GITHUB_HEAD_REF and github.ref is ${{ github.ref }}"; fi
+
+  metricstest:
+    runs-on: ubuntu-latest
+    container: golang:1.24
+    needs: branchtest
+
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: praktikum
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Download autotests binaries
+        uses: robinraju/release-downloader@v1.8
+        with:
+          repository: Yandex-Practicum/go-autotests
+          latest: true
+          fileName: "*"
+          out-file-path: .tools
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup autotest binary
+        run: |
+          chmod -R +x $GITHUB_WORKSPACE/.tools
+          mv $GITHUB_WORKSPACE/.tools/metricstest_v2 /usr/local/bin/metricstest
+          mv $GITHUB_WORKSPACE/.tools/random /usr/local/bin/random
+
+      - name: Setup go deps
+        run: |
+          go install golang.org/x/tools/cmd/goimports@latest
+
+
+      - name: Build server binary
+        run: |
+          cd cmd/server
+          go build -buildvcs=false -o server
+
+      - name: "Code increment #1"
+        if: |
+          github.ref == 'refs/heads/main' ||
+          github.head_ref == 'iter1' ||
+          github.head_ref == 'iter2' ||
+          github.head_ref == 'iter3' ||
+          github.head_ref == 'iter4' ||
+          github.head_ref == 'iter5' ||
+          github.head_ref == 'iter6' ||
+          github.head_ref == 'iter7' ||
+          github.head_ref == 'iter8' ||
+          github.head_ref == 'iter9' ||
+          github.head_ref == 'iter10' ||
+          github.head_ref == 'iter11' ||
+          github.head_ref == 'iter12' ||
+          github.head_ref == 'iter13' ||
+          github.head_ref == 'iter14'
+        run: |
+          metricstest -test.v -test.run=^TestIteration1$ \
+            -binary-path=cmd/server/server
+
+      - name: Build agent binary
+        run: |
+          cd cmd/agent
+          go build -buildvcs=false  -o agent
+
+      - name: "Code increment #2"
+        if: |
+          github.ref == 'refs/heads/main' ||
+          github.head_ref == 'iter2' ||
+          github.head_ref == 'iter3' ||
+          github.head_ref == 'iter4' ||
+          github.head_ref == 'iter5' ||
+          github.head_ref == 'iter6' ||
+          github.head_ref == 'iter7' ||
+          github.head_ref == 'iter8' ||
+          github.head_ref == 'iter9' ||
+          github.head_ref == 'iter10' ||
+          github.head_ref == 'iter11' ||
+          github.head_ref == 'iter12' ||
+          github.head_ref == 'iter13' ||
+          github.head_ref == 'iter14'
+        run: |
+          metricstest -test.v -test.run=^TestIteration2[AB]*$ \
+            -source-path=. \
+            -agent-binary-path=cmd/agent/agent
+
+      - name: "Code increment #3"
+        if: |
+          github.ref == 'refs/heads/main' ||
+          github.head_ref == 'iter3' ||
+          github.head_ref == 'iter4' ||
+          github.head_ref == 'iter5' ||
+          github.head_ref == 'iter6' ||
+          github.head_ref == 'iter7' ||
+          github.head_ref == 'iter8' ||
+          github.head_ref == 'iter9' ||
+          github.head_ref == 'iter10' ||
+          github.head_ref == 'iter11' ||
+          github.head_ref == 'iter12' ||
+          github.head_ref == 'iter13' ||
+          github.head_ref == 'iter14'
+        run: |
+          metricstest -test.v -test.run=^TestIteration3[AB]*$ \
+            -source-path=. \
+            -agent-binary-path=cmd/agent/agent \
+            -binary-path=cmd/server/server
+
+      - name: "Code increment #4"
+        if: |
+          github.ref == 'refs/heads/main' ||
+          github.head_ref == 'iter4' ||
+          github.head_ref == 'iter5' ||
+          github.head_ref == 'iter6' ||
+          github.head_ref == 'iter7' ||
+          github.head_ref == 'iter8' ||
+          github.head_ref == 'iter9' ||
+          github.head_ref == 'iter10' ||
+          github.head_ref == 'iter11' ||
+          github.head_ref == 'iter12' ||
+          github.head_ref == 'iter13' ||
+          github.head_ref == 'iter14'
+        run: |
+          SERVER_PORT=$(random unused-port)
+          ADDRESS="localhost:${SERVER_PORT}"
+          TEMP_FILE=$(random tempfile)
+          metricstest -test.v -test.run=^TestIteration4$ \
+            -agent-binary-path=cmd/agent/agent \
+            -binary-path=cmd/server/server \
+            -server-port=$SERVER_PORT \
+            -source-path=.
+
+      - name: "Code increment #5"
+        if: |
+          github.ref == 'refs/heads/main' ||
+          github.head_ref == 'iter5' ||
+          github.head_ref == 'iter6' ||
+          github.head_ref == 'iter7' ||
+          github.head_ref == 'iter8' ||
+          github.head_ref == 'iter9' ||
+          github.head_ref == 'iter10' ||
+          github.head_ref == 'iter11' ||
+          github.head_ref == 'iter12' ||
+          github.head_ref == 'iter13' ||
+          github.head_ref == 'iter14'
+        run: |
+          SERVER_PORT=$(random unused-port)
+          ADDRESS="localhost:${SERVER_PORT}"
+          TEMP_FILE=$(random tempfile)
+          metricstest -test.v -test.run=^TestIteration5$ \
+            -agent-binary-path=cmd/agent/agent \
+            -binary-path=cmd/server/server \
+            -server-port=$SERVER_PORT \
+            -source-path=.
+
+      - name: "Code increment #6"
+        if: |
+          github.ref == 'refs/heads/main' ||
+          github.head_ref == 'iter6' ||
+          github.head_ref == 'iter7' ||
+          github.head_ref == 'iter8' ||
+          github.head_ref == 'iter9' ||
+          github.head_ref == 'iter10' ||
+          github.head_ref == 'iter11' ||
+          github.head_ref == 'iter12' ||
+          github.head_ref == 'iter13' ||
+          github.head_ref == 'iter14'
+        run: |
+          SERVER_PORT=$(random unused-port)
+          ADDRESS="localhost:${SERVER_PORT}"
+          TEMP_FILE=$(random tempfile)
+          metricstest -test.v -test.run=^TestIteration6$ \
+            -agent-binary-path=cmd/agent/agent \
+            -binary-path=cmd/server/server \
+            -server-port=$SERVER_PORT \
+            -source-path=.
+
+      - name: "Code increment #7"
+        if: |
+          github.ref == 'refs/heads/main' ||
+          github.head_ref == 'iter7' ||
+          github.head_ref == 'iter8' ||
+          github.head_ref == 'iter9' ||
+          github.head_ref == 'iter10' ||
+          github.head_ref == 'iter11' ||
+          github.head_ref == 'iter12' ||
+          github.head_ref == 'iter13' ||
+          github.head_ref == 'iter14'
+        run: |
+          SERVER_PORT=$(random unused-port)
+          ADDRESS="localhost:${SERVER_PORT}"
+          TEMP_FILE=$(random tempfile)
+          metricstest -test.v -test.run=^TestIteration7$ \
+            -agent-binary-path=cmd/agent/agent \
+            -binary-path=cmd/server/server \
+            -server-port=$SERVER_PORT \
+            -source-path=.
+
+      - name: "Code increment #8"
+        if: |
+          github.ref == 'refs/heads/main' ||
+          github.head_ref == 'iter8' ||
+          github.head_ref == 'iter9' ||
+          github.head_ref == 'iter10' ||
+          github.head_ref == 'iter11' ||
+          github.head_ref == 'iter12' ||
+          github.head_ref == 'iter13' ||
+          github.head_ref == 'iter14'
+        run: |
+          SERVER_PORT=$(random unused-port)
+          ADDRESS="localhost:${SERVER_PORT}"
+          TEMP_FILE=$(random tempfile)
+          metricstest -test.v -test.run=^TestIteration8$ \
+            -agent-binary-path=cmd/agent/agent \
+            -binary-path=cmd/server/server \
+            -server-port=$SERVER_PORT \
+            -source-path=.
+
+      - name: "Code increment #9"
+        if: |
+          github.ref == 'refs/heads/main' ||
+          github.head_ref == 'iter9' ||
+          github.head_ref == 'iter10' ||
+          github.head_ref == 'iter11' ||
+          github.head_ref == 'iter12' ||
+          github.head_ref == 'iter13' ||
+          github.head_ref == 'iter14'
+        run: |
+          SERVER_PORT=$(random unused-port)
+          ADDRESS="localhost:${SERVER_PORT}"
+          TEMP_FILE=$(random tempfile)
+          metricstest -test.v -test.run=^TestIteration9$ \
+            -agent-binary-path=cmd/agent/agent \
+            -binary-path=cmd/server/server \
+            -file-storage-path=$TEMP_FILE \
+            -server-port=$SERVER_PORT \
+            -source-path=.
+
+      - name: "Code increment #10"
+        if: |
+          github.ref == 'refs/heads/main' ||
+          github.head_ref == 'iter10' ||
+          github.head_ref == 'iter11' ||
+          github.head_ref == 'iter12' ||
+          github.head_ref == 'iter13' ||
+          github.head_ref == 'iter14'
+        run: |
+          SERVER_PORT=$(random unused-port)
+          ADDRESS="localhost:${SERVER_PORT}"
+          TEMP_FILE=$(random tempfile)
+          metricstest -test.v -test.run=^TestIteration10[AB]$ \
+            -agent-binary-path=cmd/agent/agent \
+            -binary-path=cmd/server/server \
+            -database-dsn='postgres://postgres:postgres@postgres:5432/praktikum?sslmode=disable' \
+            -server-port=$SERVER_PORT \
+            -source-path=.
+
+      - name: "Code increment #11"
+        if: |
+          github.ref == 'refs/heads/main' ||
+          github.head_ref == 'iter11' ||
+          github.head_ref == 'iter12' ||
+          github.head_ref == 'iter13' ||
+          github.head_ref == 'iter14'
+        run: |
+          SERVER_PORT=$(random unused-port)
+          ADDRESS="localhost:${SERVER_PORT}"
+          TEMP_FILE=$(random tempfile)
+          metricstest -test.v -test.run=^TestIteration11$ \
+            -agent-binary-path=cmd/agent/agent \
+            -binary-path=cmd/server/server \
+            -database-dsn='postgres://postgres:postgres@postgres:5432/praktikum?sslmode=disable' \
+            -server-port=$SERVER_PORT \
+            -source-path=.
+
+      - name: "Code increment #12"
+        if: |
+          github.ref == 'refs/heads/main' ||
+          github.head_ref == 'iter12' ||
+          github.head_ref == 'iter13' ||
+          github.head_ref == 'iter14'
+        run: |
+          SERVER_PORT=$(random unused-port)
+          ADDRESS="localhost:${SERVER_PORT}"
+          TEMP_FILE=$(random tempfile)
+          metricstest -test.v -test.run=^TestIteration12$ \
+            -agent-binary-path=cmd/agent/agent \
+            -binary-path=cmd/server/server \
+            -database-dsn='postgres://postgres:postgres@postgres:5432/praktikum?sslmode=disable' \
+            -server-port=$SERVER_PORT \
+            -source-path=.
+
+      - name: "Code increment #13"
+        if: |
+          github.ref == 'refs/heads/main' ||
+          github.head_ref == 'iter13' ||
+          github.head_ref == 'iter14'
+        run: |
+          SERVER_PORT=$(random unused-port)
+          ADDRESS="localhost:${SERVER_PORT}"
+          TEMP_FILE=$(random tempfile)
+          metricstest -test.v -test.run=^TestIteration13$ \
+            -agent-binary-path=cmd/agent/agent \
+            -binary-path=cmd/server/server \
+            -database-dsn='postgres://postgres:postgres@postgres:5432/praktikum?sslmode=disable' \
+            -server-port=$SERVER_PORT \
+            -source-path=.
+
+      - name: "Code increment #14"
+        if: |
+          github.ref == 'refs/heads/main' ||
+          github.head_ref == 'iter14'
+        run: |
+          SERVER_PORT=$(random unused-port)
+          ADDRESS="localhost:${SERVER_PORT}"
+          TEMP_FILE=$(random tempfile)
+          metricstest -test.v -test.run=^TestIteration14$ \
+            -agent-binary-path=cmd/agent/agent \
+            -binary-path=cmd/server/server \
+            -database-dsn='postgres://postgres:postgres@postgres:5432/praktikum?sslmode=disable' \
+            -key="${TEMP_FILE}" \
+            -server-port=$SERVER_PORT \
+            -source-path=.
+
+      - name: "Code increment #14 (race detection)"
+        if: |
+          github.ref == 'refs/heads/main' ||
+          github.head_ref == 'iter14'
+        run: |
+          go test -v -race ./...
+
+
+=== ./.github/workflows/statictest.yml ===
+name: go vet test
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  statictest:
+    runs-on: ubuntu-latest
+    container: golang:1.24
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Download statictest binary
+        uses: robinraju/release-downloader@v1.8
+        with:
+          repository: Yandex-Practicum/go-autotests
+          latest: true
+          fileName: statictest
+          out-file-path: .tools
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup autotest binary
+        run: |
+          chmod -R +x $GITHUB_WORKSPACE/.tools/statictest
+          mv $GITHUB_WORKSPACE/.tools/statictest /usr/local/bin/statictest
+
+      - name: Run statictest
+        run: |
+          go vet -vettool=$(which statictest) ./...
+
+
+=== ./api/README.md ===
+# api
+
+В этой директории принято размещать proto-файлы или файлы в формате OpenAPI/Swagger для описания контракта сервиса.
+
+Protocol Buffers (Protobuf) будет изучаться дальше по курсу.
+
+=== ./.git/ORIG_HEAD ===
+6743a6888b3edb6351bbc016c7380e47233f2c6f
+
+
+=== ./.git/config ===
+[core]
+	repositoryformatversion = 0
+	filemode = true
+	bare = false
+	logallrefupdates = true
+	ignorecase = true
+	precomposeunicode = true
+[remote "origin"]
+	url = https://github.com/DmDyakov/metrics-collector.git
+	fetch = +refs/heads/*:refs/remotes/origin/*
+[branch "main"]
+	github-pr-base-branch = "DmDyakov#metrics-collector#v2"
+	vscode-merge-base = origin/v2
+	remote = origin
+	merge = refs/heads/main
+[remote "template"]
+	url = https://github.com/Yandex-Practicum/go-musthave-metrics-tpl.git
+	fetch = +refs/heads/*:refs/remotes/template/*
+[branch "iter1"]
+	github-pr-base-branch = "DmDyakov#metrics-collector#main"
+	vscode-merge-base = origin/main
+	remote = origin
+	merge = refs/heads/iter1
+	github-pr-owner-number = "DmDyakov#metrics-collector#1"
+[branch "iter2"]
+	github-pr-base-branch = "DmDyakov#metrics-collector#iter1"
+	vscode-merge-base = origin/iter1
+	github-pr-base-branch = "DmDyakov#metrics-collector#iter1"
+	remote = origin
+	merge = refs/heads/iter2
+	github-pr-owner-number = "DmDyakov#metrics-collector#2"
+[branch "iter3"]
+	github-pr-base-branch = "DmDyakov#metrics-collector#iter2"
+	vscode-merge-base = origin/iter2
+	remote = origin
+	merge = refs/heads/iter3
+	github-pr-owner-number = "DmDyakov#metrics-collector#3"
+[branch "iter4"]
+	github-pr-base-branch = "DmDyakov#metrics-collector#iter3"
+	vscode-merge-base = origin/iter3
+	remote = origin
+	merge = refs/heads/iter4
+	github-pr-owner-number = "DmDyakov#metrics-collector#5"
+
+
+=== ./pkg/README.md ===
+# pkg
+
+В данной директории размещаются файлы, которые можно импортировать в других приложениях. 
+
+Например, сюда можно поместить:
+- сгенерированные контракты из proto-файлов
+- публичные библиотеки и утилиты
+- общие модели данных
+- клиентские SDK
+
+Protocol Buffers (Protobuf) будет изучаться дальше по курсу.
+

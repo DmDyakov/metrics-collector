@@ -1,35 +1,50 @@
 package repository
 
+import models "metrics-collector/internal/model"
+
 type MemStorage struct {
-	gauges   map[string]float64
-	counters map[string]int64
+	metrics map[string]models.Metrics
 }
 
-func (m MemStorage) GetAllMetricsRaw() (gauges map[string]float64, counters map[string]int64) {
-	return m.gauges, m.counters
+func (ms MemStorage) GetAllMetrics() map[string]models.Metrics {
+	metrics := make(map[string]models.Metrics)
+	for metricName, metric := range ms.metrics {
+		metrics[metricName] = copyMetric(metric)
+	}
+	return metrics
 }
 
-func (m *MemStorage) GetGaugeMetricValue(metricName string) (float64, bool) {
-	value, ok := m.gauges[metricName]
-	return value, ok
+func (ms *MemStorage) GetMetric(metricName string) (models.Metrics, bool) {
+	metric, ok := ms.metrics[metricName]
+	return copyMetric(metric), ok
 }
 
-func (m *MemStorage) GetCountMetricValue(metricName string) (int64, bool) {
-	value, ok := m.counters[metricName]
-	return value, ok
-}
-
-func (m *MemStorage) UpdateCounterMetric(metricName string, v int64) {
-	m.counters[metricName] += v
-}
-
-func (m *MemStorage) UpdateGaugeMetric(metricName string, v float64) {
-	m.gauges[metricName] = v
+func (ms *MemStorage) UpdateMetric(metric models.Metrics) {
+	ms.metrics[metric.ID] = metric
 }
 
 func NewMemStorage() *MemStorage {
 	return &MemStorage{
-		gauges:   make(map[string]float64),
-		counters: make(map[string]int64),
+		metrics: make(map[string]models.Metrics),
 	}
+}
+
+func copyMetric(m models.Metrics) models.Metrics {
+	copy := models.Metrics{
+		ID:    m.ID,
+		MType: m.MType,
+		Hash:  m.Hash,
+	}
+
+	if m.Delta != nil {
+		delta := *m.Delta
+		copy.Delta = &delta
+	}
+
+	if m.Value != nil {
+		val := *m.Value
+		copy.Value = &val
+	}
+
+	return copy
 }
