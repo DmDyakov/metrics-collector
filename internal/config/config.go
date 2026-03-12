@@ -17,7 +17,7 @@ type ServerConfig struct {
 }
 
 var (
-	flagRunAddr        string
+	flagServerBaseURL  string
 	flagReportInterval string
 	flagPollInterval   string
 )
@@ -29,7 +29,7 @@ func parseFlags() {
 		defaultReportInterval = "10"
 	)
 
-	flag.StringVar(&flagRunAddr, "a", defaultServerBaseURL, "address and port to run server")
+	flag.StringVar(&flagServerBaseURL, "a", defaultServerBaseURL, "address and port to run server")
 	flag.StringVar(&flagPollInterval, "p", defaultPollInterval, "poll interval")
 	flag.StringVar(&flagReportInterval, "r", defaultReportInterval, "report interval")
 	flag.Parse()
@@ -54,13 +54,13 @@ func NewAgentConfig() (*AgentConfig, error) {
 	return &AgentConfig{
 		PollInterval:   pollDur,
 		ReportInterval: reportDur,
-		ServerBaseURL:  flagRunAddr,
+		ServerBaseURL:  flagServerBaseURL,
 	}, nil
 }
 
 func NewServerConfig() *ServerConfig {
 	parseFlags()
 	return &ServerConfig{
-		ServerBaseURL: flagRunAddr,
+		ServerBaseURL: flagServerBaseURL,
 	}
 }
