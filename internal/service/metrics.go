@@ -37,6 +37,18 @@ func (svc *MetricsService) UpdateMetric(metricType, metricName, metricValue stri
 			return ErrInvalidCounterValue
 		}
 
+		existing, ok := svc.repo.GetMetric(metricName)
+
+		if ok {
+			if existing.MType != models.Counter {
+				return ErrMetricTypeMismatch
+			}
+
+			if existing.Delta != nil {
+				delta += *existing.Delta
+			}
+		}
+
 		metric := models.Metrics{
 			ID:    metricName,
 			MType: models.Counter,
