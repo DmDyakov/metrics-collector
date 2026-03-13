@@ -6,7 +6,7 @@ type MemStorage struct {
 	metrics map[string]models.Metrics
 }
 
-func (ms MemStorage) GetAllMetrics() map[string]models.Metrics {
+func (ms *MemStorage) GetAllMetrics() map[string]models.Metrics {
 	metrics := make(map[string]models.Metrics)
 	for metricName, metric := range ms.metrics {
 		metrics[metricName] = copyMetric(metric)
