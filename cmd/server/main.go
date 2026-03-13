@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 
 	"metrics-collector/internal/config"
 	"metrics-collector/internal/handler"
@@ -11,7 +12,7 @@ import (
 )
 
 func main() {
-	cfg, err := config.NewServerConfig()
+	cfg, err := config.NewServerConfig(os.Args[1:])
 	if err != nil {
 		log.Fatalf("Failed to create server config: %v", err)
 	}

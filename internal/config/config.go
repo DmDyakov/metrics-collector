@@ -22,7 +22,7 @@ const (
 	defaultReportInterval = "10"
 )
 
-func NewAgentConfig() (*AgentConfig, error) {
+func NewAgentConfig(args []string) (*AgentConfig, error) {
 	fs := flag.NewFlagSet("agent", flag.ContinueOnError)
 
 	var (
@@ -35,7 +35,7 @@ func NewAgentConfig() (*AgentConfig, error) {
 	fs.StringVar(&pollInterval, "p", defaultPollInterval, "poll interval")
 	fs.StringVar(&reportInterval, "r", defaultReportInterval, "report interval")
 
-	if err := fs.Parse(flag.Args()); err != nil {
+	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}
 
@@ -59,14 +59,14 @@ func NewAgentConfig() (*AgentConfig, error) {
 	}, nil
 }
 
-func NewServerConfig() (*ServerConfig, error) {
+func NewServerConfig(args []string) (*ServerConfig, error) {
 	fs := flag.NewFlagSet("server", flag.ContinueOnError)
 
 	var serverBaseURL string
 
 	fs.StringVar(&serverBaseURL, "a", defaultServerBaseURL, "address and port to run server")
 
-	if err := fs.Parse(flag.Args()); err != nil {
+	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}
 
