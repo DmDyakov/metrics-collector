@@ -11,7 +11,10 @@ import (
 )
 
 func main() {
-	cfg := config.NewServerConfig()
+	cfg, err := config.NewServerConfig()
+	if err != nil {
+		log.Fatalf("Failed to create server config: %v", err)
+	}
 
 	repo := repository.NewMemStorage()
 	svc := service.NewMetricsService(repo)
