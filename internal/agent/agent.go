@@ -23,7 +23,7 @@ func Run(cfg *config.AgentConfig) {
 		pollCount++
 
 		Poll(metrics, pollCount)
-		time.Sleep(cfg.PollInterval)
+		time.Sleep(time.Duration(cfg.PollInterval) * time.Second)
 
 		if pollCount%reportMultiplier == 0 {
 			Send(metrics, cfg.ServerBaseURL)
