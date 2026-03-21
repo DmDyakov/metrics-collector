@@ -42,3 +42,9 @@ git fetch template && git checkout template/v2 .github
 - **Clean Architecture**
 - **Hexagonal Architecture**
 - **Layered Architecture**
+
+## Запустить сервер локально
+go run cmd/server/main.go
+
+## Запустить агент локально
+go run cmd/agent/main.go
