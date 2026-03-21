@@ -1,10 +1,15 @@
 package agent
 
-import "testing"
+import (
+	"testing"
+
+	"go.uber.org/zap"
+)
 
 func TestPoll_AllMetricsPresent(t *testing.T) {
 	metrics := make(Metrics)
-	Poll(metrics, 1)
+	logger := zap.NewNop().Sugar()
+	Poll(metrics, 1, logger)
 
 	expectedMetrics := []string{
 		"PollCount",

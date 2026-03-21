@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"go.uber.org/zap"
 )
 
 func TestUpdateMetric(t *testing.T) {
@@ -59,9 +61,10 @@ func TestUpdateMetric(t *testing.T) {
 		},
 	}
 
+	logger := zap.NewNop().Sugar()
 	repo := repository.NewMemStorage()
 	svc := service.NewMetricsService(repo)
-	h := handler.NewHandler(svc)
+	h := handler.NewHandler(svc, logger)
 
 	router := h.NewMetricsRouter()
 

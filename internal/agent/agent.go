@@ -2,18 +2,19 @@ package agent
 
 import (
 	"fmt"
-	"log"
 	"math/rand/v2"
 	"net/http"
 	"runtime"
 	"time"
 
 	"metrics-collector/internal/config"
+
+	"go.uber.org/zap"
 )
 
 type Metrics map[string]string
 
-func Run(cfg *config.AgentConfig) {
+func Run(cfg *config.AgentConfig, logger *zap.SugaredLogger) {
 	var metrics = make(Metrics)
 	reportMultiplier := int64(cfg.ReportInterval / cfg.PollInterval)
 	var pollCount int64 = 0
@@ -22,19 +23,19 @@ func Run(cfg *config.AgentConfig) {
 
 		pollCount++
 
-		Poll(metrics, pollCount)
+		Poll(metrics, pollCount, logger)
 		time.Sleep(time.Duration(cfg.PollInterval) * time.Second)
 
 		if pollCount%reportMultiplier == 0 {
-			Send(metrics, cfg.ServerBaseURL)
+			Send(metrics, cfg.ServerBaseURL, logger)
 		}
 
 	}
 
 }
 
-func Poll(metrics Metrics, count int64) {
-	log.Printf("--- Опрос метрик #%d ---\n", count)
+func Poll(metrics Metrics, count int64, logger *zap.SugaredLogger) {
+	logger.Infof("--- Опрос метрик #%d ---", count)
 
 	var memStats runtime.MemStats
 
@@ -72,25 +73,33 @@ func Poll(metrics Metrics, count int64) {
 	metrics["TotalAlloc"] = fmt.Sprintf("%f", float64(memStats.TotalAlloc))
 }
 
-func Send(metrics Metrics, baseURL string) {
-	log.Println("--- Отправка метрик ---")
+func Send(metrics Metrics, baseURL string, logger *zap.SugaredLogger) {
+	logger.Infoln("--- Отправка метрик ---")
 	for name, value := range metrics {
 
 		metricType := "gauge"
 		if name == "PollCount" {
 			metricType = "counter"
 		}
+		start := time.Now()
 
 		url := fmt.Sprintf("http://%s/update/%s/%s/%s", baseURL, metricType, name, value)
 		resp, err := http.Post(url, "text/plain", nil)
 		if err != nil {
-			fmt.Println(err)
+			logger.Errorw("ошибка отправки запроса",
+				"uri", url,
+				"method", "POST",
+				"error", err,
+			)
 			continue
 		}
 		resp.Body.Close()
 
-		fmt.Printf("Response status: %s\n", resp.Status)
-
+		duration := time.Since(start)
+		logger.Infoln(
+			"uri", url,
+			"method", "POST",
+			"duration", duration,
+		)
 	}
-
 }

@@ -9,15 +9,16 @@ import (
 	"metrics-collector/internal/service"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	"go.uber.org/zap"
 )
 
 type Handler struct {
 	service *service.MetricsService
+	logger  *zap.SugaredLogger
 }
 
-func NewHandler(service *service.MetricsService) *Handler {
-	return &Handler{service: service}
+func NewHandler(service *service.MetricsService, logger *zap.SugaredLogger) *Handler {
+	return &Handler{service: service, logger: logger}
 }
 
 func (h *Handler) RootHandle(res http.ResponseWriter, req *http.Request) {
@@ -106,7 +107,9 @@ func (h *Handler) UpdateHandle(res http.ResponseWriter, req *http.Request) {
 
 func (h *Handler) NewMetricsRouter() chi.Router {
 	r := chi.NewRouter()
-	r.Use(middleware.Logger)
+	r.Use(func(next http.Handler) http.Handler {
+		return WithLogging(next, h.logger)
+	})
 
 	r.Route("/", func(r chi.Router) {
 		r.Get("/", h.RootHandle)                     // GET /
