@@ -7,6 +7,7 @@ import (
 	"metrics-collector/internal/service"
 	"metrics-collector/internal/templates"
 
+	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 )
@@ -32,6 +33,7 @@ func NewHandler(service *service.MetricsService, logger *zap.SugaredLogger) (*Ha
 
 func (h *Handler) NewMetricsRouter() chi.Router {
 	r := chi.NewRouter()
+	r.Use(middleware.StripSlashes)
 	r.Use(func(next http.Handler) http.Handler {
 		return WithLogging(next, h.logger)
 	})

@@ -109,7 +109,6 @@ func Send(metrics Metrics, baseURL string, logger *zap.SugaredLogger) {
 				"method", "POST",
 				"error", err,
 			)
-			resp.Body.Close()
 			continue
 		}
 		resp.Body.Close()
