@@ -2,23 +2,35 @@ package handler
 
 import (
 	"bytes"
+	"encoding/json"
 	"html/template"
-	"io"
 	"net/http"
 
+	models "metrics-collector/internal/model"
 	"metrics-collector/internal/service"
+	"metrics-collector/internal/templates"
 
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 )
 
 type Handler struct {
-	service *service.MetricsService
-	logger  *zap.SugaredLogger
+	service                *service.MetricsService
+	logger                 *zap.SugaredLogger
+	allMetricsHTMLTemplate *template.Template
 }
 
-func NewHandler(service *service.MetricsService, logger *zap.SugaredLogger) *Handler {
-	return &Handler{service: service, logger: logger}
+func NewHandler(service *service.MetricsService, logger *zap.SugaredLogger) (*Handler, error) {
+	tmpl, err := template.ParseFS(templates.FS, "metrics.html")
+	if err != nil {
+		return nil, err
+	}
+
+	return &Handler{
+		service:                service,
+		logger:                 logger,
+		allMetricsHTMLTemplate: tmpl,
+	}, nil
 }
 
 func (h *Handler) RootHandle(res http.ResponseWriter, req *http.Request) {
@@ -28,14 +40,8 @@ func (h *Handler) RootHandle(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	allMetricsHTMLTemplate, err := template.ParseFiles("internal/templates/metrics.html")
-	if err != nil {
-		http.Error(res, "template not found", http.StatusInternalServerError)
-		return
-	}
-
 	var buf bytes.Buffer
-	if err := allMetricsHTMLTemplate.Execute(&buf, allMetrics); err != nil {
+	if err := h.allMetricsHTMLTemplate.Execute(&buf, allMetrics); err != nil {
 		http.Error(res, "internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -46,20 +52,18 @@ func (h *Handler) RootHandle(res http.ResponseWriter, req *http.Request) {
 }
 
 func (h *Handler) ValueHandle(res http.ResponseWriter, req *http.Request) {
-	metricType := chi.URLParam(req, "type")
-	metricName := chi.URLParam(req, "name")
-
-	if metricType == "" {
-		http.Error(res, "metric type is required", http.StatusNotFound)
+	var m models.Metrics
+	dec := json.NewDecoder(req.Body)
+	if err := dec.Decode(&m); err != nil {
+		http.Error(res, "cannot decode request JSON body", http.StatusBadRequest)
+		return
+	}
+	if err := m.ValidateBase(); err != nil {
+		http.Error(res, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	if metricName == "" {
-		http.Error(res, "metric name is required", http.StatusNotFound)
-		return
-	}
-
-	value, err := h.service.GetMetricValue(metricType, metricName)
+	metric, err := h.service.GetMetricValue(m)
 	if err != nil {
 		switch {
 		case err == service.ErrMetricNotFound:
@@ -72,37 +76,39 @@ func (h *Handler) ValueHandle(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	res.WriteHeader(http.StatusOK)
-	io.WriteString(res, value)
-
+	res.Header().Set("Content-Type", "application/json")
+	enc := json.NewEncoder(res)
+	if err := enc.Encode(metric); err != nil {
+		http.Error(res, "error encoding response", http.StatusBadRequest)
+		return
+	}
 }
 
 func (h *Handler) UpdateHandle(res http.ResponseWriter, req *http.Request) {
-	metricType := chi.URLParam(req, "type")
-	metricName := chi.URLParam(req, "name")
-	metricValue := chi.URLParam(req, "value")
-
-	if metricType == "" {
-		http.Error(res, "metric type is required", http.StatusNotFound)
+	var m models.Metrics
+	dec := json.NewDecoder(req.Body)
+	if err := dec.Decode(&m); err != nil {
+		http.Error(res, "cannot decode request JSON body", http.StatusBadRequest)
 		return
 	}
 
-	if metricName == "" {
-		http.Error(res, "metric name is required", http.StatusNotFound)
-		return
-	}
-
-	if metricValue == "" {
-		http.Error(res, "metric value is required", http.StatusBadRequest)
-		return
-	}
-
-	if err := h.service.UpdateMetric(metricType, metricName, metricValue); err != nil {
+	if err := m.ValidateForUpdate(); err != nil {
 		http.Error(res, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	res.WriteHeader(http.StatusOK)
+	updatedMetric, err := h.service.UpdateMetric(m)
+	if err != nil {
+		http.Error(res, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	res.Header().Set("Content-Type", "application/json")
+	enc := json.NewEncoder(res)
+	if err := enc.Encode(updatedMetric); err != nil {
+		http.Error(res, "error encoding response", http.StatusInternalServerError)
+		return
+	}
 }
 
 func (h *Handler) NewMetricsRouter() chi.Router {
@@ -111,10 +117,8 @@ func (h *Handler) NewMetricsRouter() chi.Router {
 		return WithLogging(next, h.logger)
 	})
 
-	r.Route("/", func(r chi.Router) {
-		r.Get("/", h.RootHandle)                     // GET /
-		r.Get("/value/{type}/{name}", h.ValueHandle) // GET /value/gauge/RandomValue
-	})
-	r.Post("/update/{type}/{name}/{value}", h.UpdateHandle) // POST /value/gauge/RandomValue/123.456
+	r.Get("/", h.RootHandle)
+	r.Post("/value", h.ValueHandle)
+	r.Post("/update", h.UpdateHandle)
 	return r
 }

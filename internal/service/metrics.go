@@ -9,8 +9,8 @@ import (
 
 type Repository interface {
 	GetAllMetrics() map[string]models.Metrics
-	GetMetric(metricName string) (models.Metrics, bool)
-	UpdateMetric(metric models.Metrics)
+	GetMetric(metricName string) (*models.Metrics, bool)
+	UpdateMetric(metric models.Metrics) *models.Metrics
 }
 
 var (
@@ -29,19 +29,17 @@ func NewMetricsService(repo Repository) *MetricsService {
 	return &MetricsService{repo: repo}
 }
 
-func (svc *MetricsService) UpdateMetric(metricType, metricName, metricValue string) error {
-	switch metricType {
-	case models.Counter:
-		delta, err := strconv.ParseInt(metricValue, 10, 64)
-		if err != nil {
-			return ErrInvalidCounterValue
-		}
+func (svc *MetricsService) UpdateMetric(metric models.Metrics) (*models.Metrics, error) {
+	var m models.Metrics
 
-		existing, ok := svc.repo.GetMetric(metricName)
+	switch metric.MType {
+	case models.Counter:
+		delta := *metric.Delta
+		existing, ok := svc.repo.GetMetric(metric.ID)
 
 		if ok {
 			if existing.MType != models.Counter {
-				return ErrMetricTypeMismatch
+				return nil, ErrMetricTypeMismatch
 			}
 
 			if existing.Delta != nil {
@@ -49,58 +47,47 @@ func (svc *MetricsService) UpdateMetric(metricType, metricName, metricValue stri
 			}
 		}
 
-		metric := models.Metrics{
-			ID:    metricName,
+		m = models.Metrics{
+			ID:    metric.ID,
 			MType: models.Counter,
 			Delta: &delta,
 		}
 
-		svc.repo.UpdateMetric(metric)
-
 	case models.Gauge:
-		value, err := strconv.ParseFloat(metricValue, 64)
-		if err != nil {
-			return ErrInvalidGaugeValue
-		}
-
-		metric := models.Metrics{
-			ID:    metricName,
-			MType: models.Gauge,
-			Value: &value,
-		}
-
-		svc.repo.UpdateMetric(metric)
+		m = metric
 
 	default:
-		return ErrUnknownMetricType
+		return nil, ErrUnknownMetricType
 	}
 
-	return nil
+	updatedMetric := svc.repo.UpdateMetric(m)
+
+	return updatedMetric, nil
 }
 
-func (svc *MetricsService) GetMetricValue(metricType, metricName string) (string, error) {
-	metric, ok := svc.repo.GetMetric(metricName)
+func (svc *MetricsService) GetMetricValue(m models.Metrics) (*models.Metrics, error) {
+	metric, ok := svc.repo.GetMetric(m.ID)
 	if !ok {
-		return "", ErrMetricNotFound
+		return nil, ErrMetricNotFound
 	}
 
-	if metric.MType != metricType {
-		return "", ErrMetricTypeMismatch
+	if metric.MType != m.MType {
+		return nil, ErrMetricTypeMismatch
 	}
 
-	switch metricType {
+	switch m.MType {
 	case models.Gauge:
 		if metric.Value == nil {
-			return "", ErrInvalidGaugeValue
+			return nil, ErrInvalidGaugeValue
 		}
-		return strconv.FormatFloat(*metric.Value, 'f', -1, 64), nil
+		return metric, nil
 	case models.Counter:
 		if metric.Delta == nil {
-			return "", ErrInvalidCounterValue
+			return nil, ErrInvalidCounterValue
 		}
-		return strconv.FormatInt(*metric.Delta, 10), nil
+		return metric, nil
 	default:
-		return "", ErrUnknownMetricType
+		return nil, ErrUnknownMetricType
 	}
 }
 

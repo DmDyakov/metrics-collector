@@ -27,7 +27,10 @@ func main() {
 
 	repo := repository.NewMemStorage()
 	svc := service.NewMetricsService(repo)
-	h := handler.NewHandler(svc, logger)
+	h, err := handler.NewHandler(svc, logger)
+	if err != nil {
+		logger.Fatalw("server failed", "error", err)
+	}
 
 	r := h.NewMetricsRouter()
 

@@ -1,8 +1,9 @@
 package service
 
 import (
-	models "metrics-collector/internal/model"
 	"testing"
+
+	models "metrics-collector/internal/model"
 )
 
 type mockRepository struct {
@@ -19,81 +20,135 @@ func (m *mockRepository) GetAllMetrics() map[string]models.Metrics {
 	return m.data
 }
 
-func (m *mockRepository) GetMetric(name string) (models.Metrics, bool) {
+func (m *mockRepository) GetMetric(name string) (*models.Metrics, bool) {
 	metric, ok := m.data[name]
-	return metric, ok
+	return &metric, ok
 }
 
-func (m *mockRepository) UpdateMetric(metric models.Metrics) {
+func (m *mockRepository) UpdateMetric(metric models.Metrics) *models.Metrics {
 	m.data[metric.ID] = metric
+	return &metric
 }
 
 func TestUpdateMetric(t *testing.T) {
-	tests := []struct {
-		name      string
-		mType     string
-		mName     string
-		mValue    string
-		expectErr error
-		expectKey string
-	}{
-		{
-			name:      "valid gauge",
-			mType:     models.Gauge,
-			mName:     "Alloc",
-			mValue:    "10.5",
-			expectErr: nil,
-			expectKey: "Alloc",
-		},
-		{
-			name:      "valid counter",
-			mType:     models.Counter,
-			mName:     "PollCount",
-			mValue:    "5",
-			expectErr: nil,
-			expectKey: "PollCount",
-		},
-		{
-			name:      "invalid counter value",
-			mType:     models.Counter,
-			mName:     "PollCount",
-			mValue:    "abc",
-			expectErr: ErrInvalidCounterValue,
-		},
-		{
-			name:      "invalid gauge value",
-			mType:     models.Gauge,
-			mName:     "Alloc",
-			mValue:    "abc",
-			expectErr: ErrInvalidGaugeValue,
-		},
-		{
-			name:      "unknown type",
-			mType:     "unknown",
-			mName:     "Metric",
-			mValue:    "1",
-			expectErr: ErrUnknownMetricType,
-		},
-	}
+	// Простые значения
+	gaugeVal := 10.5
+	counterVal := int64(5)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	// Тест 1: Обновление gauge
+	t.Run("update gauge", func(t *testing.T) {
+		repo := newMockRepository()
+		svc := NewMetricsService(repo)
 
-			repo := newMockRepository()
-			svc := NewMetricsService(repo)
+		metric := models.Metrics{
+			ID:    "Alloc",
+			MType: models.Gauge,
+			Value: &gaugeVal,
+		}
 
-			err := svc.UpdateMetric(tt.mType, tt.mName, tt.mValue)
+		result, err := svc.UpdateMetric(metric)
 
-			if err != tt.expectErr {
-				t.Fatalf("expected error %v, got %v", tt.expectErr, err)
-			}
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 
-			if tt.expectErr == nil {
-				if _, ok := repo.data[tt.expectKey]; !ok {
-					t.Fatalf("metric not saved in repo")
-				}
-			}
+		if result == nil {
+			t.Fatal("expected result, got nil")
+		}
 
+		saved, ok := repo.data["Alloc"]
+		if !ok {
+			t.Fatal("metric not saved")
+		}
+
+		if saved.Value == nil {
+			t.Fatal("value is nil")
+		}
+
+		if *saved.Value != gaugeVal {
+			t.Errorf("expected %f, got %f", gaugeVal, *saved.Value)
+		}
+	})
+
+	// Тест 2: Обновление counter
+	t.Run("update counter", func(t *testing.T) {
+		repo := newMockRepository()
+		svc := NewMetricsService(repo)
+
+		metric := models.Metrics{
+			ID:    "PollCount",
+			MType: models.Counter,
+			Delta: &counterVal,
+		}
+
+		result, err := svc.UpdateMetric(metric)
+
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if result == nil {
+			t.Fatal("expected result, got nil")
+		}
+
+		saved, ok := repo.data["PollCount"]
+		if !ok {
+			t.Fatal("metric not saved")
+		}
+
+		if saved.Delta == nil {
+			t.Fatal("delta is nil")
+		}
+
+		if *saved.Delta != counterVal {
+			t.Errorf("expected %d, got %d", counterVal, *saved.Delta)
+		}
+	})
+
+	// Тест 3: Инкремент существующего counter
+	t.Run("increment counter", func(t *testing.T) {
+		repo := newMockRepository()
+
+		// Сначала сохраняем начальное значение
+		initial := int64(5)
+		repo.UpdateMetric(models.Metrics{
+			ID:    "PollCount",
+			MType: models.Counter,
+			Delta: &initial,
 		})
-	}
+
+		svc := NewMetricsService(repo)
+
+		// Добавляем 3
+		increment := int64(3)
+		metric := models.Metrics{
+			ID:    "PollCount",
+			MType: models.Counter,
+			Delta: &increment,
+		}
+
+		result, err := svc.UpdateMetric(metric)
+
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if result == nil {
+			t.Fatal("expected result, got nil")
+		}
+
+		saved, ok := repo.data["PollCount"]
+		if !ok {
+			t.Fatal("metric not saved")
+		}
+
+		if saved.Delta == nil {
+			t.Fatal("delta is nil")
+		}
+
+		expected := int64(8) // 5 + 3
+		if *saved.Delta != expected {
+			t.Errorf("expected %d, got %d", expected, *saved.Delta)
+		}
+	})
 }

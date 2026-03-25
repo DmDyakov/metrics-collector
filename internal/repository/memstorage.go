@@ -9,18 +9,25 @@ type MemStorage struct {
 func (ms *MemStorage) GetAllMetrics() map[string]models.Metrics {
 	metrics := make(map[string]models.Metrics)
 	for metricName, metric := range ms.metrics {
-		metrics[metricName] = copyMetric(metric)
+		copied := copyMetric(metric)
+		metrics[metricName] = *copied
 	}
 	return metrics
 }
 
-func (ms *MemStorage) GetMetric(metricName string) (models.Metrics, bool) {
+func (ms *MemStorage) GetMetric(metricName string) (*models.Metrics, bool) {
 	metric, ok := ms.metrics[metricName]
-	return copyMetric(metric), ok
+	if !ok {
+		return nil, false
+	}
+	return copyMetric(metric), true
 }
 
-func (ms *MemStorage) UpdateMetric(metric models.Metrics) {
+func (ms *MemStorage) UpdateMetric(metric models.Metrics) *models.Metrics {
 	ms.metrics[metric.ID] = metric
+
+	result := copyMetric(ms.metrics[metric.ID])
+	return result
 }
 
 func NewMemStorage() *MemStorage {
@@ -29,8 +36,8 @@ func NewMemStorage() *MemStorage {
 	}
 }
 
-func copyMetric(m models.Metrics) models.Metrics {
-	copy := models.Metrics{
+func copyMetric(m models.Metrics) *models.Metrics {
+	copy := &models.Metrics{
 		ID:    m.ID,
 		MType: m.MType,
 		Hash:  m.Hash,
