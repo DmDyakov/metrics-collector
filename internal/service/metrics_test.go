@@ -30,12 +30,10 @@ func (m *mockRepository) UpdateMetric(metric models.Metrics) *models.Metrics {
 	return &metric
 }
 
-func TestUpdateMetric(t *testing.T) {
-	// Простые значения
+func TestUpdateMetricV2(t *testing.T) {
 	gaugeVal := 10.5
 	counterVal := int64(5)
 
-	// Тест 1: Обновление gauge
 	t.Run("update gauge", func(t *testing.T) {
 		repo := newMockRepository()
 		svc := NewMetricsService(repo)
@@ -46,7 +44,7 @@ func TestUpdateMetric(t *testing.T) {
 			Value: &gaugeVal,
 		}
 
-		result, err := svc.UpdateMetric(metric)
+		result, err := svc.UpdateMetricV2(metric)
 
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -70,7 +68,6 @@ func TestUpdateMetric(t *testing.T) {
 		}
 	})
 
-	// Тест 2: Обновление counter
 	t.Run("update counter", func(t *testing.T) {
 		repo := newMockRepository()
 		svc := NewMetricsService(repo)
@@ -81,7 +78,7 @@ func TestUpdateMetric(t *testing.T) {
 			Delta: &counterVal,
 		}
 
-		result, err := svc.UpdateMetric(metric)
+		result, err := svc.UpdateMetricV2(metric)
 
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -105,11 +102,9 @@ func TestUpdateMetric(t *testing.T) {
 		}
 	})
 
-	// Тест 3: Инкремент существующего counter
 	t.Run("increment counter", func(t *testing.T) {
 		repo := newMockRepository()
 
-		// Сначала сохраняем начальное значение
 		initial := int64(5)
 		repo.UpdateMetric(models.Metrics{
 			ID:    "PollCount",
@@ -119,7 +114,6 @@ func TestUpdateMetric(t *testing.T) {
 
 		svc := NewMetricsService(repo)
 
-		// Добавляем 3
 		increment := int64(3)
 		metric := models.Metrics{
 			ID:    "PollCount",
@@ -127,7 +121,7 @@ func TestUpdateMetric(t *testing.T) {
 			Delta: &increment,
 		}
 
-		result, err := svc.UpdateMetric(metric)
+		result, err := svc.UpdateMetricV2(metric)
 
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
