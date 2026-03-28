@@ -63,19 +63,17 @@ func handleServiceError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, service.ErrInvalidRepoData):
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+
 	case errors.Is(err, service.ErrMetricNotFound):
 		http.Error(w, err.Error(), http.StatusNotFound)
-	case errors.Is(err, service.ErrUnknownMetricType):
+
+	case errors.Is(err, service.ErrUnknownMetricType),
+		errors.Is(err, service.ErrMetricTypeMismatch),
+		errors.Is(err, service.ErrInvalidCounterValue),
+		errors.Is(err, service.ErrInvalidGaugeValue),
+		errors.Is(err, service.ErrMetricDeltaForCountRequired):
 		http.Error(w, err.Error(), http.StatusBadRequest)
-	case errors.Is(err, service.ErrMetricTypeMismatch):
-		http.Error(w, err.Error(), http.StatusBadRequest)
-	case errors.Is(err, service.ErrInvalidCounterValue):
-		http.Error(w, err.Error(), http.StatusBadRequest)
-	case errors.Is(err, service.ErrInvalidGaugeValue):
-		http.Error(w, err.Error(), http.StatusBadRequest)
-	case errors.Is(err, service.ErrMetricDeltaForCountRequired):
-		http.Error(w, err.Error(), http.StatusBadRequest)
+
 	default:
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}

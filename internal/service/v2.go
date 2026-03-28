@@ -58,7 +58,7 @@ func (svc *MetricsService) GetMetricValueV2(input models.Metrics) (*models.Metri
 
 	m, ok := svc.repo.GetMetric(input.ID)
 	if !ok {
-		return nil, fmt.Errorf("%w: %w", ErrInvalidRepoData, ErrMetricNotFound)
+		return nil, ErrMetricNotFound
 	}
 
 	if m.MType != input.MType {

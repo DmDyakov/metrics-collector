@@ -96,7 +96,7 @@ func (svc *MetricsService) GetMetricValue(metricType, metricName string) (*strin
 
 	m, ok := svc.repo.GetMetric(input.ID)
 	if !ok {
-		return nil, fmt.Errorf("%w: %w", ErrInvalidRepoData, ErrMetricNotFound)
+		return nil, ErrMetricNotFound
 	}
 
 	if m.MType != input.MType {
