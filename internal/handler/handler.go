@@ -2,8 +2,9 @@ package handler
 
 import (
 	"html/template"
-	"net/http"
 
+	"metrics-collector/internal/compress"
+	models "metrics-collector/internal/model"
 	"metrics-collector/internal/service"
 	"metrics-collector/internal/templates"
 
@@ -12,13 +13,22 @@ import (
 	"go.uber.org/zap"
 )
 
+type MetricsService interface {
+	UpdateMetric(metricType, metricName, metricValue string) error
+	UpdateMetricV2(metric models.Metrics) (*models.Metrics, error)
+	GetMetricValue(metricType, metricName string) (string, error)
+	GetMetricValueV2(m models.Metrics) (*models.Metrics, error)
+	GetAllMetrics() (map[string]string, error)
+}
+
 type Handler struct {
 	service                *service.MetricsService
 	logger                 *zap.SugaredLogger
+	gzip                   *compress.Gzip
 	allMetricsHTMLTemplate *template.Template
 }
 
-func NewHandler(service *service.MetricsService, logger *zap.SugaredLogger) (*Handler, error) {
+func NewHandler(service *service.MetricsService, logger *zap.SugaredLogger, gzip *compress.Gzip) (*Handler, error) {
 	tmpl, err := template.ParseFS(templates.FS, "metrics.html")
 	if err != nil {
 		return nil, err
@@ -27,6 +37,7 @@ func NewHandler(service *service.MetricsService, logger *zap.SugaredLogger) (*Ha
 	return &Handler{
 		service:                service,
 		logger:                 logger,
+		gzip:                   gzip,
 		allMetricsHTMLTemplate: tmpl,
 	}, nil
 }
@@ -34,9 +45,8 @@ func NewHandler(service *service.MetricsService, logger *zap.SugaredLogger) (*Ha
 func (h *Handler) NewMetricsRouter() chi.Router {
 	r := chi.NewRouter()
 	r.Use(middleware.StripSlashes)
-	r.Use(func(next http.Handler) http.Handler {
-		return WithLogging(next, h.logger)
-	})
+	r.Use(h.WithLogging)
+	r.Use(h.WithCompressing)
 
 	r.Get("/", h.RootHandle)
 	r.Get("/value/{type}/{name}", h.ValueHandle)

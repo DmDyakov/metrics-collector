@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 
+	"metrics-collector/internal/compress"
 	"metrics-collector/internal/config"
 	"metrics-collector/internal/handler"
 
@@ -27,7 +28,8 @@ func main() {
 
 	repo := repository.NewMemStorage()
 	svc := service.NewMetricsService(repo)
-	h, err := handler.NewHandler(svc, logger)
+	gzip := compress.NewGzip()
+	h, err := handler.NewHandler(svc, logger, gzip)
 	if err != nil {
 		logger.Fatalw("server failed", "error", err)
 	}

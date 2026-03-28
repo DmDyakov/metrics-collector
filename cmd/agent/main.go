@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"metrics-collector/internal/agent"
+	"metrics-collector/internal/compress"
 	"metrics-collector/internal/config"
 	"metrics-collector/internal/logger"
 	"os"
@@ -26,6 +27,9 @@ func main() {
 		logger.Fatalln("Config is nil")
 	}
 
-	agent.Run(cfg, logger)
+	gzip := compress.NewGzip()
+	agent := agent.NewAgent(cfg, logger, gzip)
+
+	agent.Run()
 
 }

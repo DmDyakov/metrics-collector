@@ -2,8 +2,6 @@ package handler
 
 import (
 	"net/http"
-
-	"go.uber.org/zap"
 )
 
 type (
@@ -35,7 +33,7 @@ func (r *loggingResponseWriter) WriteHeader(statusCode int) {
 	r.ResponseWriter.WriteHeader(statusCode)
 }
 
-func WithLogging(h http.Handler, logger *zap.SugaredLogger) http.Handler {
+func (h *Handler) WithLogging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 		responseData := &responseData{
@@ -48,13 +46,13 @@ func WithLogging(h http.Handler, logger *zap.SugaredLogger) http.Handler {
 			responseData:   responseData,
 		}
 
-		h.ServeHTTP(lw, r)
+		next.ServeHTTP(lw, r)
 
 		if responseData.status == 0 {
 			responseData.status = http.StatusOK
 		}
 
-		logger.Infoln(
+		h.logger.Infoln(
 			"status", responseData.status,
 			"size", responseData.size,
 		)

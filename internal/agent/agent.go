@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"time"
 
+	"metrics-collector/internal/compress"
 	"metrics-collector/internal/config"
 
 	"go.uber.org/zap"
@@ -16,28 +17,46 @@ import (
 
 type Metrics map[string]any
 
-func Run(cfg *config.AgentConfig, logger *zap.SugaredLogger) {
+type Agent struct {
+	cfg    *config.AgentConfig
+	logger *zap.SugaredLogger
+	gzip   *compress.Gzip
+	client *http.Client
+}
+
+func NewAgent(cfg *config.AgentConfig, logger *zap.SugaredLogger, gzip *compress.Gzip) *Agent {
+	return &Agent{
+		cfg:    cfg,
+		logger: logger,
+		gzip:   gzip,
+		client: &http.Client{
+			Timeout: 10 * time.Second,
+		},
+	}
+}
+
+func (a *Agent) Run() {
 	var metrics = make(Metrics)
-	reportMultiplier := int64(cfg.ReportInterval / cfg.PollInterval)
+	reportMultiplier := int64(a.cfg.ReportInterval / a.cfg.PollInterval)
 	var pollCount int64 = 0
 
 	for {
 
 		pollCount++
 
-		Poll(metrics, pollCount, logger)
-		time.Sleep(time.Duration(cfg.PollInterval) * time.Second)
+		a.Poll(metrics, pollCount)
+		time.Sleep(time.Duration(a.cfg.PollInterval) * time.Second)
 
 		if pollCount%reportMultiplier == 0 {
-			Send(metrics, cfg.ServerBaseURL, logger)
+			a.Send(metrics)
 		}
 
 	}
 
 }
 
-func Poll(metrics Metrics, count int64, logger *zap.SugaredLogger) {
-	logger.Infof("--- Опрос метрик #%d ---", count)
+func (a *Agent) Poll(metrics Metrics, count int64) {
+	a.logger.Infof("--- Опрос метрик #%d ---", count)
 
 	var memStats runtime.MemStats
 
@@ -75,8 +94,8 @@ func Poll(metrics Metrics, count int64, logger *zap.SugaredLogger) {
 	metrics["TotalAlloc"] = float64(memStats.TotalAlloc)
 }
 
-func Send(metrics Metrics, baseURL string, logger *zap.SugaredLogger) {
-	logger.Infoln("--- Отправка метрик ---")
+func (a *Agent) Send(metrics Metrics) {
+	a.logger.Infoln("--- Отправка метрик ---")
 	for name, value := range metrics {
 		var payload Metrics
 		payload = Metrics{
@@ -95,18 +114,44 @@ func Send(metrics Metrics, baseURL string, logger *zap.SugaredLogger) {
 
 		start := time.Now()
 
-		url := fmt.Sprintf("http://%s/update", baseURL)
+		url := fmt.Sprintf("http://%s/update", a.cfg.ServerBaseURL)
 
 		jsonPayload, err := json.Marshal(payload)
 		if err != nil {
-			fmt.Printf("Error marshaling JSON: %v\n", err)
-			return
+			a.logger.Errorw("Error JSON marshaling",
+				"error", err,
+			)
+			continue
 		}
-		resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonPayload))
+
+		compressedJson, err := a.gzip.Compress(jsonPayload)
 		if err != nil {
-			logger.Errorw("ошибка отправки запроса",
+			a.logger.Errorw("Error JSON compressing",
+				"error", err,
+			)
+			continue
+		}
+
+		method := "POST"
+		req, err := http.NewRequest(method, url, bytes.NewReader(compressedJson))
+		if err != nil {
+			a.logger.Errorw("ошибка формирования запроса",
 				"uri", url,
-				"method", "POST",
+				"method", method,
+				"error", err,
+			)
+			continue
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Encoding", "gzip")
+		req.Header.Set("Accept-Encoding", "gzip")
+
+		resp, err := a.client.Do(req)
+		if err != nil {
+			a.logger.Errorw("ошибка отправки запроса",
+				"uri", url,
+				"method", method,
 				"error", err,
 			)
 			continue
@@ -114,7 +159,7 @@ func Send(metrics Metrics, baseURL string, logger *zap.SugaredLogger) {
 		resp.Body.Close()
 
 		duration := time.Since(start)
-		logger.Infoln(
+		a.logger.Infow("request sent",
 			"uri", url,
 			"method", "POST",
 			"duration", duration,
