@@ -3,86 +3,53 @@ package handler
 import (
 	"bytes"
 	"io"
-	"metrics-collector/internal/service"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 )
 
-func (h *Handler) RootHandle(res http.ResponseWriter, req *http.Request) {
+func (h *Handler) RootHandle(w http.ResponseWriter, r *http.Request) {
 	allMetrics, err := h.service.GetAllMetrics()
 	if err != nil {
-		http.Error(res, err.Error(), http.StatusBadRequest)
+		handleServiceError(w, err)
 		return
 	}
 
 	var buf bytes.Buffer
 	if err := h.allMetricsHTMLTemplate.Execute(&buf, allMetrics); err != nil {
-		http.Error(res, "internal server error", http.StatusInternalServerError)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
-	res.Header().Set("Content-Type", "text/html; charset=utf-8")
-	res.WriteHeader(http.StatusOK)
-	buf.WriteTo(res)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	buf.WriteTo(w)
 }
 
-func (h *Handler) ValueHandle(res http.ResponseWriter, req *http.Request) {
-	metricType := chi.URLParam(req, "type")
-	metricName := chi.URLParam(req, "name")
-
-	if metricType == "" {
-		http.Error(res, "metric type is required", http.StatusNotFound)
-		return
-	}
-
-	if metricName == "" {
-		http.Error(res, "metric name is required", http.StatusNotFound)
-		return
-	}
+func (h *Handler) ValueHandle(w http.ResponseWriter, r *http.Request) {
+	metricType := chi.URLParam(r, "type")
+	metricName := chi.URLParam(r, "name")
 
 	value, err := h.service.GetMetricValue(metricType, metricName)
 	if err != nil {
-		switch {
-		case err == service.ErrMetricNotFound:
-			http.Error(res, err.Error(), http.StatusNotFound)
-		case err == service.ErrUnknownMetricType:
-			http.Error(res, err.Error(), http.StatusBadRequest)
-		default:
-			http.Error(res, err.Error(), http.StatusBadRequest)
-		}
+		handleServiceError(w, err)
 		return
 	}
 
-	res.WriteHeader(http.StatusOK)
-	io.WriteString(res, value)
+	w.WriteHeader(http.StatusOK)
+	io.WriteString(w, *value)
 
 }
 
-func (h *Handler) UpdateHandle(res http.ResponseWriter, req *http.Request) {
-	metricType := chi.URLParam(req, "type")
-	metricName := chi.URLParam(req, "name")
-	metricValue := chi.URLParam(req, "value")
-
-	if metricType == "" {
-		http.Error(res, "metric type is required", http.StatusNotFound)
-		return
-	}
-
-	if metricName == "" {
-		http.Error(res, "metric name is required", http.StatusNotFound)
-		return
-	}
-
-	if metricValue == "" {
-		http.Error(res, "metric value is required", http.StatusBadRequest)
-		return
-	}
+func (h *Handler) UpdateHandle(w http.ResponseWriter, r *http.Request) {
+	metricType := chi.URLParam(r, "type")
+	metricName := chi.URLParam(r, "name")
+	metricValue := chi.URLParam(r, "value")
 
 	if err := h.service.UpdateMetric(metricType, metricName, metricValue); err != nil {
-		http.Error(res, err.Error(), http.StatusBadRequest)
+		handleServiceError(w, err)
 		return
 	}
 
-	res.WriteHeader(http.StatusOK)
+	w.WriteHeader(http.StatusOK)
 }

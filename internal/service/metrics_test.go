@@ -30,7 +30,7 @@ func (m *mockRepository) UpdateMetric(metric models.Metrics) *models.Metrics {
 	return &metric
 }
 
-func TestUpdateMetricV2(t *testing.T) {
+func TestService_UpdateMetricV2(t *testing.T) {
 	gaugeVal := 10.5
 	counterVal := int64(5)
 

@@ -8,7 +8,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func TestPoll_AllMetricsPresent(t *testing.T) {
+func TestAgent_Poll(t *testing.T) {
 	metrics := make(Metrics)
 	logger := zap.NewNop().Sugar()
 	gzip := compress.NewGzip()

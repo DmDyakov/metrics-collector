@@ -11,6 +11,7 @@ import (
 
 	"metrics-collector/internal/compress"
 	"metrics-collector/internal/config"
+	models "metrics-collector/internal/model"
 
 	"go.uber.org/zap"
 )
@@ -100,14 +101,14 @@ func (a *Agent) Send(metrics Metrics) {
 		var payload Metrics
 		payload = Metrics{
 			"id":    name,
-			"type":  "gauge",
+			"type":  models.Gauge,
 			"value": value,
 		}
 
 		if name == "PollCount" {
 			payload = Metrics{
 				"id":    name,
-				"type":  "counter",
+				"type":  models.Counter,
 				"delta": value,
 			}
 		}

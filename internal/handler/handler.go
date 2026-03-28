@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"errors"
 	"html/template"
+	"net/http"
 
 	"metrics-collector/internal/compress"
 	models "metrics-collector/internal/model"
@@ -16,19 +18,19 @@ import (
 type MetricsService interface {
 	UpdateMetric(metricType, metricName, metricValue string) error
 	UpdateMetricV2(metric models.Metrics) (*models.Metrics, error)
-	GetMetricValue(metricType, metricName string) (string, error)
+	GetMetricValue(metricType, metricName string) (*string, error)
 	GetMetricValueV2(m models.Metrics) (*models.Metrics, error)
 	GetAllMetrics() (map[string]string, error)
 }
 
 type Handler struct {
-	service                *service.MetricsService
+	service                MetricsService
 	logger                 *zap.SugaredLogger
 	gzip                   *compress.Gzip
 	allMetricsHTMLTemplate *template.Template
 }
 
-func NewHandler(service *service.MetricsService, logger *zap.SugaredLogger, gzip *compress.Gzip) (*Handler, error) {
+func NewHandler(service MetricsService, logger *zap.SugaredLogger, gzip *compress.Gzip) (*Handler, error) {
 	tmpl, err := template.ParseFS(templates.FS, "metrics.html")
 	if err != nil {
 		return nil, err
@@ -55,4 +57,26 @@ func (h *Handler) NewMetricsRouter() chi.Router {
 	r.Post("/update", h.UpdateHandleV2)
 
 	return r
+}
+
+func handleServiceError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, service.ErrInvalidRepoData):
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	case errors.Is(err, service.ErrMetricNotFound):
+		http.Error(w, err.Error(), http.StatusNotFound)
+	case errors.Is(err, service.ErrUnknownMetricType):
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	case errors.Is(err, service.ErrMetricTypeMismatch):
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	case errors.Is(err, service.ErrInvalidCounterValue):
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	case errors.Is(err, service.ErrInvalidGaugeValue):
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	case errors.Is(err, service.ErrMetricDeltaForCountRequired):
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	default:
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }

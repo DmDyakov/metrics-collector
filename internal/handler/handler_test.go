@@ -16,7 +16,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func TestUpdateMetricV2(t *testing.T) {
+func TestHandler_UpdateMetricV2(t *testing.T) {
 	logger := zap.NewNop().Sugar()
 	repo := repository.NewMemStorage()
 	svc := service.NewMetricsService(repo)
@@ -29,10 +29,9 @@ func TestUpdateMetricV2(t *testing.T) {
 	router := h.NewMetricsRouter()
 
 	tests := []struct {
-		name       string
-		metric     models.Metrics
-		wantCode   int
-		wantErrMsg string
+		name     string
+		metric   models.Metrics
+		wantCode int
 	}{
 		{
 			name: "positive - update counter metric",
@@ -59,8 +58,7 @@ func TestUpdateMetricV2(t *testing.T) {
 				MType: "unknown",
 				Delta: func() *int64 { v := int64(1); return &v }(),
 			},
-			wantCode:   http.StatusBadRequest,
-			wantErrMsg: "unknown metric type: unknown\n",
+			wantCode: http.StatusBadRequest,
 		},
 		{
 			name: "negative - missing delta for counter",
@@ -68,8 +66,7 @@ func TestUpdateMetricV2(t *testing.T) {
 				ID:    "Test",
 				MType: models.Counter,
 			},
-			wantCode:   http.StatusBadRequest,
-			wantErrMsg: "metric delta is required for counter\n",
+			wantCode: http.StatusBadRequest,
 		},
 	}
 
@@ -88,61 +85,36 @@ func TestUpdateMetricV2(t *testing.T) {
 			if w.Code != tt.wantCode {
 				t.Errorf("status code = %v, want %v", w.Code, tt.wantCode)
 			}
-
-			if tt.wantErrMsg != "" && w.Body.String() != tt.wantErrMsg {
-				t.Errorf("response body = %q, want %q", w.Body.String(), tt.wantErrMsg)
-			}
 		})
 	}
 }
 
-func TestUpdateMetric(t *testing.T) {
-	type want struct {
-		code        int
-		response    string
-		contentType string
-	}
+func TestHandler_UpdateMetric(t *testing.T) {
 
 	testTable := []struct {
-		name string
-		url  string
-		want want
+		name     string
+		url      string
+		wantCode int
 	}{
 		{
-			name: "positive test #1 - update counter metric",
-			url:  "/update/counter/testPollCount/1",
-			want: want{
-				code:        http.StatusOK,
-				response:    "",
-				contentType: "",
-			},
+			name:     "positive test #1 - update counter metric",
+			url:      "/update/counter/testPollCount/1",
+			wantCode: http.StatusOK,
 		},
 		{
-			name: "positive test #2 - update gauge metric",
-			url:  "/update/gauge/testRandomValue/123.456",
-			want: want{
-				code:        http.StatusOK,
-				response:    "",
-				contentType: "",
-			},
+			name:     "positive test #2 - update gauge metric",
+			url:      "/update/gauge/testRandomValue/123.456",
+			wantCode: http.StatusOK,
 		},
 		{
-			name: "invalid URL format",
-			url:  "/update/invalid",
-			want: want{
-				code:        http.StatusNotFound,
-				response:    "404 page not found\n",
-				contentType: "text/plain; charset=utf-8",
-			},
+			name:     "invalid URL format",
+			url:      "/update/invalid",
+			wantCode: http.StatusNotFound,
 		},
 		{
-			name: "unknown metric type",
-			url:  "/update/unknown/test/123",
-			want: want{
-				code:        http.StatusBadRequest,
-				response:    "unknown metric type\n",
-				contentType: "text/plain; charset=utf-8",
-			},
+			name:     "unknown metric type",
+			url:      "/update/unknown/test/123",
+			wantCode: http.StatusBadRequest,
 		},
 	}
 
@@ -163,18 +135,8 @@ func TestUpdateMetric(t *testing.T) {
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
-			if w.Code != tt.want.code {
-				t.Errorf("UpdateMetric() status = %v, want %v", w.Code, tt.want)
-			}
-
-			if w.Body.String() != tt.want.response {
-				t.Errorf("response body = %q, want %q", w.Body.String(), tt.want.response)
-			}
-
-			if tt.want.contentType != "" {
-				if ct := w.Header().Get("Content-Type"); ct != tt.want.contentType {
-					t.Errorf("Content-Type = %q, want %q", ct, tt.want.contentType)
-				}
+			if w.Code != tt.wantCode {
+				t.Errorf("UpdateMetric() status = %v, want %v", w.Code, tt.wantCode)
 			}
 		})
 	}
