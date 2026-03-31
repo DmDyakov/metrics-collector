@@ -2,6 +2,7 @@ package config
 
 import (
 	"flag"
+	"fmt"
 
 	"github.com/caarlos0/env/v11"
 )
@@ -13,13 +14,19 @@ type AgentConfig struct {
 }
 
 type ServerConfig struct {
-	ServerBaseURL string `env:"ADDRESS"`
+	ServerBaseURL   string `env:"ADDRESS"`
+	StoreInterval   int    `env:"STORE_INTERVAL"`
+	FileStoragePath string `env:"FILE_STORAGE_PATH"`
+	Restore         bool   `env:"RESTORE"`
 }
 
 const (
-	defaultServerBaseURL  = "localhost:8080"
-	defaultPollInterval   = 2
-	defaultReportInterval = 10
+	defaultServerBaseURL   = "localhost:8080"
+	defaultPollInterval    = 2
+	defaultReportInterval  = 10
+	defaultStoreInterval   = 300
+	defaultFileStoragePath = "store.json"
+	defaultRestore         = false
 )
 
 func NewAgentConfig(args []string) (*AgentConfig, error) {
@@ -51,15 +58,19 @@ func NewAgentConfig(args []string) (*AgentConfig, error) {
 	}
 
 	if cfg.ServerBaseURL == "" {
-		cfg.ServerBaseURL = serverBaseURLFlag
+		return nil, fmt.Errorf("server URL can not be empty")
 	}
 
-	if cfg.PollInterval == 0 {
-		cfg.PollInterval = pollIntervalFlag
+	if cfg.PollInterval <= 0 {
+		return nil, fmt.Errorf("poll interval must be positive")
 	}
 
-	if cfg.ReportInterval == 0 {
-		cfg.ReportInterval = reportIntervalFlag
+	if cfg.ReportInterval <= 0 {
+		return nil, fmt.Errorf("report interval must be positive")
+	}
+
+	if cfg.ReportInterval < cfg.PollInterval {
+		return nil, fmt.Errorf("report interval (%d) must be greater than or equal to poll interval (%d)", cfg.ReportInterval, cfg.PollInterval)
 	}
 
 	return cfg, nil
@@ -68,16 +79,27 @@ func NewAgentConfig(args []string) (*AgentConfig, error) {
 func NewServerConfig(args []string) (*ServerConfig, error) {
 	fs := flag.NewFlagSet("server", flag.ContinueOnError)
 
-	var serverBaseURLFlag string
+	var (
+		serverBaseURLFlag   string
+		storeIntervalFlag   int
+		fileStoragePathFlag string
+		restoreFlag         bool
+	)
 
 	fs.StringVar(&serverBaseURLFlag, "a", defaultServerBaseURL, "address and port to run server")
+	fs.IntVar(&storeIntervalFlag, "i", defaultStoreInterval, "store interval")
+	fs.StringVar(&fileStoragePathFlag, "f", defaultFileStoragePath, "file storage path")
+	fs.BoolVar(&restoreFlag, "r", defaultRestore, "restore")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}
 
 	cfg := &ServerConfig{
-		ServerBaseURL: serverBaseURLFlag,
+		ServerBaseURL:   serverBaseURLFlag,
+		StoreInterval:   storeIntervalFlag,
+		FileStoragePath: fileStoragePathFlag,
+		Restore:         restoreFlag,
 	}
 
 	err := env.Parse(cfg)
@@ -86,7 +108,15 @@ func NewServerConfig(args []string) (*ServerConfig, error) {
 	}
 
 	if cfg.ServerBaseURL == "" {
-		cfg.ServerBaseURL = serverBaseURLFlag
+		return nil, fmt.Errorf("server URL can not be empty")
+	}
+
+	if cfg.StoreInterval < 0 {
+		return nil, fmt.Errorf("store interval must be non-negative")
+	}
+
+	if cfg.FileStoragePath == "" {
+		return nil, fmt.Errorf("file storage path can not be empty")
 	}
 
 	return cfg, nil

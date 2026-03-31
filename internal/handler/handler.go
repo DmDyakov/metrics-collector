@@ -61,7 +61,7 @@ func (h *Handler) NewMetricsRouter() chi.Router {
 
 func handleServiceError(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, service.ErrInvalidRepoData):
+	case errors.Is(err, service.ErrInvalidResponse):
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 
 	case errors.Is(err, service.ErrMetricNotFound):

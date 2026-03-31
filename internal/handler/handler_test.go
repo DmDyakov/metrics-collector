@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"metrics-collector/internal/compress"
+	"metrics-collector/internal/config"
 	"metrics-collector/internal/handler"
 	models "metrics-collector/internal/model"
 	"metrics-collector/internal/repository"
@@ -18,7 +19,8 @@ import (
 
 func TestHandler_UpdateMetricV2(t *testing.T) {
 	logger := zap.NewNop().Sugar()
-	repo := repository.NewMemStorage()
+	cfg, _ := config.NewServerConfig([]string{})
+	repo, _ := repository.NewRepository(cfg)
 	svc := service.NewMetricsService(repo)
 	gzip := compress.NewGzip()
 	h, err := handler.NewHandler(svc, logger, gzip)
@@ -119,7 +121,8 @@ func TestHandler_UpdateMetric(t *testing.T) {
 	}
 
 	logger := zap.NewNop().Sugar()
-	repo := repository.NewMemStorage()
+	cfg, _ := config.NewServerConfig([]string{})
+	repo, _ := repository.NewRepository(cfg)
 	svc := service.NewMetricsService(repo)
 	gzip := compress.NewGzip()
 	h, err := handler.NewHandler(svc, logger, gzip)

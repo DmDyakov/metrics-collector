@@ -68,12 +68,12 @@ func (h *Handler) WithCompressing(next http.Handler) http.Handler {
 		// ========== Сжатие ответа ==========
 		if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
 			gzWriter := gzip.NewWriter(w)
+			defer gzWriter.Close()
 			gzw := &gzipResponseWriter{
 				ResponseWriter: w,
 				writer:         gzWriter,
 			}
 			next.ServeHTTP(gzw, r)
-			gzWriter.Close()
 			return
 		}
 		// ========== Если нет нужных заголовков ==========

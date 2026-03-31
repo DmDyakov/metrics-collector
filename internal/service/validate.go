@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	ErrInvalidRepoData = errors.New("invalid metric data in repo")
+	ErrInvalidResponse = errors.New("invalid response data")
 	ErrInvalidRequest  = errors.New("invalid request data")
 
 	ErrMetricTypeRequired          = errors.New("metric type is required")

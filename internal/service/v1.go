@@ -29,21 +29,21 @@ func (svc *MetricsService) UpdateMetric(metricType, metricName, metricValue stri
 		existing, ok := svc.repo.GetMetric(input.ID)
 		if ok {
 			if existing.MType != models.Counter {
-				return fmt.Errorf("%w: %w", ErrInvalidRepoData, ErrMetricTypeMismatch)
+				return fmt.Errorf("%w: %w", ErrInvalidResponse, ErrMetricTypeMismatch)
 			}
 			if existing.Delta != nil {
 				delta += *existing.Delta
 			}
 		}
 
-		updatedMetric := svc.repo.UpdateMetric(models.Metrics{
+		updatedMetric, err := svc.repo.UpdateMetric(models.Metrics{
 			ID:    input.ID,
 			MType: models.Counter,
 			Delta: &delta,
 		})
 
 		if err = svc.validateMetricFull(updatedMetric); err != nil {
-			return fmt.Errorf("%w: %w", ErrInvalidRepoData, err)
+			return fmt.Errorf("%w: %w", ErrInvalidResponse, err)
 		}
 
 	case models.Gauge:
@@ -54,10 +54,14 @@ func (svc *MetricsService) UpdateMetric(metricType, metricName, metricValue stri
 
 		input.Value = &value
 
-		updatedMetric := svc.repo.UpdateMetric(input)
+		updatedMetric, err := svc.repo.UpdateMetric(input)
+		if err != nil {
+			return err
+		}
+
 		err = svc.validateMetricFull(updatedMetric)
 		if err != nil {
-			return fmt.Errorf("%w: %w", ErrInvalidRepoData, err)
+			return fmt.Errorf("%w: %w", ErrInvalidResponse, err)
 		}
 
 	default:
@@ -75,7 +79,7 @@ func (svc *MetricsService) GetAllMetrics() (map[string]string, error) {
 	for name, metric := range metrics {
 		err := svc.validateMetricFull(&metric)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %w", ErrInvalidRepoData, err)
+			return nil, fmt.Errorf("%w: %w", ErrInvalidResponse, err)
 		}
 		value := formatToString(&metric)
 		allMetrics[name] = value
@@ -100,12 +104,12 @@ func (svc *MetricsService) GetMetricValue(metricType, metricName string) (*strin
 	}
 
 	if m.MType != input.MType {
-		return nil, fmt.Errorf("%w: %w", ErrInvalidRepoData, ErrMetricTypeMismatch)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidResponse, ErrMetricTypeMismatch)
 	}
 
 	err := svc.validateMetricFull(m)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrInvalidRepoData, err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidResponse, err)
 	}
 
 	value := formatToString(m)

@@ -7,7 +7,7 @@ import (
 type Repository interface {
 	GetAllMetrics() map[string]models.Metrics
 	GetMetric(metricName string) (*models.Metrics, bool)
-	UpdateMetric(metric models.Metrics) *models.Metrics
+	UpdateMetric(metric models.Metrics) (*models.Metrics, error)
 }
 
 type MetricsService struct {
@@ -17,3 +17,4 @@ type MetricsService struct {
 func NewMetricsService(repo Repository) *MetricsService {
 	return &MetricsService{repo: repo}
 }
+

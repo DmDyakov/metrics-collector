@@ -38,14 +38,17 @@ func (svc *MetricsService) UpdateMetricV2(input models.Metrics) (*models.Metrics
 		m = input
 
 	default:
-		return nil, fmt.Errorf("%w: %w", ErrInvalidRepoData, ErrUnknownMetricType)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidResponse, ErrUnknownMetricType)
 	}
 
-	updatedMetric := svc.repo.UpdateMetric(m)
+	updatedMetric, err := svc.repo.UpdateMetric(m)
+	if err != nil {
+		return nil, err
+	}
 
 	err = svc.validateMetricFull(updatedMetric)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrInvalidRepoData, err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidResponse, err)
 	}
 
 	return updatedMetric, nil
@@ -62,12 +65,12 @@ func (svc *MetricsService) GetMetricValueV2(input models.Metrics) (*models.Metri
 	}
 
 	if m.MType != input.MType {
-		return nil, fmt.Errorf("%w: %w", ErrInvalidRepoData, ErrMetricTypeMismatch)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidResponse, ErrMetricTypeMismatch)
 	}
 
 	err := svc.validateMetricFull(m)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrInvalidRepoData, err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidResponse, err)
 	}
 
 	return m, nil

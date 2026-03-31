@@ -1,9 +1,17 @@
 package repository
 
-import models "metrics-collector/internal/model"
+import (
+	models "metrics-collector/internal/model"
+)
 
 type MemStorage struct {
 	metrics map[string]models.Metrics
+}
+
+func NewMemStorage() *MemStorage {
+	return &MemStorage{
+		metrics: make(map[string]models.Metrics),
+	}
 }
 
 func (ms *MemStorage) GetAllMetrics() map[string]models.Metrics {
@@ -27,13 +35,12 @@ func (ms *MemStorage) UpdateMetric(metric models.Metrics) *models.Metrics {
 	ms.metrics[metric.ID] = metric
 
 	result := copyMetric(ms.metrics[metric.ID])
+
 	return result
 }
 
-func NewMemStorage() *MemStorage {
-	return &MemStorage{
-		metrics: make(map[string]models.Metrics),
-	}
+func (ms *MemStorage) replaceMetrics(metrics map[string]models.Metrics) {
+	ms.metrics = metrics
 }
 
 func copyMetric(m models.Metrics) *models.Metrics {

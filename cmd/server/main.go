@@ -8,10 +8,10 @@ import (
 	"metrics-collector/internal/compress"
 	"metrics-collector/internal/config"
 	"metrics-collector/internal/handler"
-
 	"metrics-collector/internal/logger"
 	"metrics-collector/internal/repository"
 	"metrics-collector/internal/service"
+	"metrics-collector/internal/worker"
 )
 
 func main() {
@@ -26,12 +26,24 @@ func main() {
 		logger.Fatalf("Failed to create server config: %v", err)
 	}
 
-	repo := repository.NewMemStorage()
+	repo, err := repository.NewRepository(cfg)
+	if err != nil {
+		logger.Fatalw("Failed to create repository", "error", err)
+	}
+
+	if cfg.StoreInterval > 0 {
+		backupWorker := worker.NewBackupWorker(cfg.StoreInterval, repo, logger)
+		backupWorker.Start()
+		logger.Infof("Backup worker started with interval %d seconds", cfg.StoreInterval)
+	} else {
+		logger.Infof("Backup worker disabled (store_interval = 0)")
+	}
+
 	svc := service.NewMetricsService(repo)
 	gzip := compress.NewGzip()
 	h, err := handler.NewHandler(svc, logger, gzip)
 	if err != nil {
-		logger.Fatalw("server failed", "error", err)
+		logger.Fatalw("Failed to create handler", "error", err)
 	}
 
 	r := h.NewMetricsRouter()

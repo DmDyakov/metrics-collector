@@ -25,9 +25,9 @@ func (m *mockRepository) GetMetric(name string) (*models.Metrics, bool) {
 	return &metric, ok
 }
 
-func (m *mockRepository) UpdateMetric(metric models.Metrics) *models.Metrics {
+func (m *mockRepository) UpdateMetric(metric models.Metrics) (*models.Metrics, error) {
 	m.data[metric.ID] = metric
-	return &metric
+	return &metric, nil
 }
 
 func TestService_UpdateMetricV2(t *testing.T) {
