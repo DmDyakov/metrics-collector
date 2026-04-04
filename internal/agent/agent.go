@@ -20,12 +20,12 @@ type Metrics map[string]any
 
 type Agent struct {
 	cfg    *config.AgentConfig
-	logger *zap.SugaredLogger
+	logger *zap.Logger
 	gzip   *compress.Gzip
 	client *http.Client
 }
 
-func NewAgent(cfg *config.AgentConfig, logger *zap.SugaredLogger, gzip *compress.Gzip) *Agent {
+func NewAgent(cfg *config.AgentConfig, logger *zap.Logger, gzip *compress.Gzip) *Agent {
 	return &Agent{
 		cfg:    cfg,
 		logger: logger,
@@ -41,23 +41,25 @@ func (a *Agent) Run() {
 	reportMultiplier := int64(a.cfg.ReportInterval / a.cfg.PollInterval)
 	var pollCount int64 = 0
 
-	for {
+	pollTicker := time.NewTicker(time.Duration(a.cfg.PollInterval) * time.Second)
+	defer pollTicker.Stop()
 
+	for range pollTicker.C {
 		pollCount++
 
 		a.Poll(metrics, pollCount)
-		time.Sleep(time.Duration(a.cfg.PollInterval) * time.Second)
 
 		if pollCount%reportMultiplier == 0 {
 			a.Send(metrics)
 		}
-
 	}
 
 }
 
 func (a *Agent) Poll(metrics Metrics, count int64) {
-	a.logger.Infof("--- Опрос метрик #%d ---", count)
+	a.logger.Info("Опрос метрик",
+		zap.Int64("iteration", count),
+	)
 
 	var memStats runtime.MemStats
 
@@ -96,7 +98,7 @@ func (a *Agent) Poll(metrics Metrics, count int64) {
 }
 
 func (a *Agent) Send(metrics Metrics) {
-	a.logger.Infoln("--- Отправка метрик ---")
+	a.logger.Info("--- Отправка метрик ---")
 	for name, value := range metrics {
 		var payload Metrics
 		payload = Metrics{
@@ -119,27 +121,23 @@ func (a *Agent) Send(metrics Metrics) {
 
 		jsonPayload, err := json.Marshal(payload)
 		if err != nil {
-			a.logger.Errorw("Error JSON marshaling",
-				"error", err,
-			)
+			a.logger.Error("Error JSON marshaling", zap.Error(err))
 			continue
 		}
 
 		compressedJson, err := a.gzip.Compress(jsonPayload)
 		if err != nil {
-			a.logger.Errorw("Error JSON compressing",
-				"error", err,
-			)
+			a.logger.Error("Error JSON compressing", zap.Error(err))
 			continue
 		}
 
 		method := "POST"
 		req, err := http.NewRequest(method, url, bytes.NewReader(compressedJson))
 		if err != nil {
-			a.logger.Errorw("ошибка формирования запроса",
-				"uri", url,
-				"method", method,
-				"error", err,
+			a.logger.Error("failed to build request",
+				zap.String("uri", url),
+				zap.String("method", method),
+				zap.Error(err),
 			)
 			continue
 		}
@@ -150,20 +148,20 @@ func (a *Agent) Send(metrics Metrics) {
 
 		resp, err := a.client.Do(req)
 		if err != nil {
-			a.logger.Errorw("ошибка отправки запроса",
-				"uri", url,
-				"method", method,
-				"error", err,
+			a.logger.Error("failed to send request",
+				zap.String("uri", url),
+				zap.String("method", method),
+				zap.Error(err),
 			)
 			continue
 		}
 		resp.Body.Close()
 
 		duration := time.Since(start)
-		a.logger.Infow("request sent",
-			"uri", url,
-			"method", "POST",
-			"duration", duration,
+		a.logger.Info("request sent",
+			zap.String("uri", url),
+			zap.String("method", "POST"),
+			zap.Duration("duration", duration),
 		)
 	}
 }

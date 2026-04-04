@@ -1,148 +1,118 @@
 package service
 
 import (
+	models "metrics-collector/internal/model"
+	"metrics-collector/internal/service/mocks"
 	"testing"
 
-	models "metrics-collector/internal/model"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 )
 
-type mockRepository struct {
-	data map[string]models.Metrics
-}
+func TestService_UpdateMetricByJSON(t *testing.T) {
 
-func newMockRepository() *mockRepository {
-	return &mockRepository{
-		data: make(map[string]models.Metrics),
-	}
-}
+	t.Run("positive: create new counter metric", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
 
-func (m *mockRepository) GetAllMetrics() map[string]models.Metrics {
-	return m.data
-}
+		mockRepo := mocks.NewMockRepository(ctrl)
+		svc := NewMetricsService(mockRepo)
 
-func (m *mockRepository) GetMetric(name string) (*models.Metrics, bool) {
-	metric, ok := m.data[name]
-	return &metric, ok
-}
+		inputDelta := int64(10)
+		input := models.Metrics{
+			ID:    "TestCount",
+			MType: models.Counter,
+			Delta: &inputDelta,
+		}
 
-func (m *mockRepository) UpdateMetric(metric models.Metrics) (*models.Metrics, error) {
-	m.data[metric.ID] = metric
-	return &metric, nil
-}
+		mockRepo.EXPECT().
+			GetMetric("TestCount").
+			Return(nil, false)
 
-func TestService_UpdateMetricV2(t *testing.T) {
-	gaugeVal := 10.5
-	counterVal := int64(5)
+		mockRepo.EXPECT().
+			UpdateMetric(input).
+			Return(&input, nil)
 
-	t.Run("update gauge", func(t *testing.T) {
-		repo := newMockRepository()
-		svc := NewMetricsService(repo)
+		result, err := svc.UpdateMetricByJSON(input)
 
-		metric := models.Metrics{
-			ID:    "Alloc",
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, *input.Delta, *result.Delta)
+		assert.Equal(t, input.MType, result.MType)
+		assert.Equal(t, input.ID, result.ID)
+		assert.Nil(t, result.Value)
+	})
+
+	t.Run("positive: increment existing counter metric", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockRepo := mocks.NewMockRepository(ctrl)
+		svc := NewMetricsService(mockRepo)
+
+		inputDelta := int64(10)
+		input := models.Metrics{
+			ID:    "TestCount",
+			MType: models.Counter,
+			Delta: &inputDelta,
+		}
+
+		outputDelta := int64(3)
+		existing := models.Metrics{
+			ID:    "TestCount",
+			MType: models.Counter,
+			Delta: &outputDelta,
+		}
+
+		sumDelta := *input.Delta + *existing.Delta
+		processed := models.Metrics{
+			ID:    "TestCount",
+			MType: models.Counter,
+			Delta: &sumDelta,
+		}
+
+		mockRepo.EXPECT().
+			GetMetric("TestCount").
+			Return(&existing, true)
+
+		mockRepo.EXPECT().
+			UpdateMetric(processed).
+			Return(&processed, nil)
+
+		result, err := svc.UpdateMetricByJSON(input)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, *result.Delta, *input.Delta+*existing.Delta)
+		assert.Equal(t, input.MType, result.MType)
+		assert.Equal(t, input.ID, result.ID)
+		assert.Nil(t, result.Value)
+	})
+
+	t.Run("positive: create or update new gauge metric", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockRepo := mocks.NewMockRepository(ctrl)
+		svc := NewMetricsService(mockRepo)
+
+		inputValue := float64(2.5)
+		input := models.Metrics{
+			ID:    "TestGauge",
 			MType: models.Gauge,
-			Value: &gaugeVal,
+			Value: &inputValue,
 		}
 
-		result, err := svc.UpdateMetricV2(metric)
+		mockRepo.EXPECT().
+			UpdateMetric(input).
+			Return(&input, nil)
 
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if result == nil {
-			t.Fatal("expected result, got nil")
-		}
-
-		saved, ok := repo.data["Alloc"]
-		if !ok {
-			t.Fatal("metric not saved")
-		}
-
-		if saved.Value == nil {
-			t.Fatal("value is nil")
-		}
-
-		if *saved.Value != gaugeVal {
-			t.Errorf("expected %f, got %f", gaugeVal, *saved.Value)
-		}
-	})
-
-	t.Run("update counter", func(t *testing.T) {
-		repo := newMockRepository()
-		svc := NewMetricsService(repo)
-
-		metric := models.Metrics{
-			ID:    "PollCount",
-			MType: models.Counter,
-			Delta: &counterVal,
-		}
-
-		result, err := svc.UpdateMetricV2(metric)
-
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if result == nil {
-			t.Fatal("expected result, got nil")
-		}
-
-		saved, ok := repo.data["PollCount"]
-		if !ok {
-			t.Fatal("metric not saved")
-		}
-
-		if saved.Delta == nil {
-			t.Fatal("delta is nil")
-		}
-
-		if *saved.Delta != counterVal {
-			t.Errorf("expected %d, got %d", counterVal, *saved.Delta)
-		}
-	})
-
-	t.Run("increment counter", func(t *testing.T) {
-		repo := newMockRepository()
-
-		initial := int64(5)
-		repo.UpdateMetric(models.Metrics{
-			ID:    "PollCount",
-			MType: models.Counter,
-			Delta: &initial,
-		})
-
-		svc := NewMetricsService(repo)
-
-		increment := int64(3)
-		metric := models.Metrics{
-			ID:    "PollCount",
-			MType: models.Counter,
-			Delta: &increment,
-		}
-
-		result, err := svc.UpdateMetricV2(metric)
-
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if result == nil {
-			t.Fatal("expected result, got nil")
-		}
-
-		saved, ok := repo.data["PollCount"]
-		if !ok {
-			t.Fatal("metric not saved")
-		}
-
-		if saved.Delta == nil {
-			t.Fatal("delta is nil")
-		}
-
-		expected := int64(8) // 5 + 3
-		if *saved.Delta != expected {
-			t.Errorf("expected %d, got %d", expected, *saved.Delta)
-		}
+		result, err := svc.UpdateMetricByJSON(input)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, input.MType, result.MType)
+		assert.Equal(t, input.ID, result.ID)
+		assert.Equal(t, *result.Value, *input.Value)
+		assert.Nil(t, result.Delta)
 	})
 }

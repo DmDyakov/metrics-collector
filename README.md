@@ -48,3 +48,9 @@ go run cmd/server/main.go
 
 ## Запустить агент локально
 go run cmd/agent/main.go
+
+## Красивый вывод тестов
+### Установка gotestfmt
+go install github.com/gotesttools/gotestfmt/v2/cmd/gotestfmt@latest
+### Команда для вывода
+go test -v -json ./... 2>&1 | gotestfmt

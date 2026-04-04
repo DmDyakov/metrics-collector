@@ -2,6 +2,8 @@ package handler
 
 import (
 	"net/http"
+
+	"go.uber.org/zap"
 )
 
 type (
@@ -52,9 +54,10 @@ func (h *Handler) WithLogging(next http.Handler) http.Handler {
 			responseData.status = http.StatusOK
 		}
 
-		h.logger.Infoln(
-			"status", responseData.status,
-			"size", responseData.size,
+		h.logger.Info(
+			"response",
+			zap.Int("status", responseData.status),
+			zap.Int("size", responseData.size),
 		)
 	})
 }

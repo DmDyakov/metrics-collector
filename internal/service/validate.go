@@ -1,53 +1,38 @@
 package service
 
 import (
-	"errors"
 	"fmt"
+	"metrics-collector/internal/errs"
 	models "metrics-collector/internal/model"
-)
-
-var (
-	ErrInvalidResponse = errors.New("invalid response data")
-	ErrInvalidRequest  = errors.New("invalid request data")
-
-	ErrMetricTypeRequired          = errors.New("metric type is required")
-	ErrMetricNameRequired          = errors.New("metric name is required")
-	ErrMetricValueForGaugeRequired = errors.New("metric value is required for gauge")
-	ErrMetricDeltaForCountRequired = errors.New("metric delta is required for counter")
-	ErrMetricTypeMismatch          = errors.New("metric type mismatch")
-	ErrUnknownMetricType           = errors.New("unknown metric type")
-	ErrMetricNotFound              = errors.New("metric not found")
-	ErrInvalidCounterValue         = errors.New("invalid counter value, should be int")
-	ErrInvalidGaugeValue           = errors.New("invalid gauge value, should be float")
 )
 
 func (svc *MetricsService) validateRequired(m models.Metrics) error {
 	if m.MType == "" {
-		return ErrMetricTypeRequired
+		return errs.ErrMetricTypeRequired
 	}
 	if m.ID == "" {
-		return ErrMetricNameRequired
+		return errs.ErrMetricNameRequired
 	}
 	return nil
 }
 
 func (svc *MetricsService) validateMetricType(m models.Metrics) error {
 	if m.MType != models.Gauge && m.MType != models.Counter {
-		return fmt.Errorf("%w: %s", ErrUnknownMetricType, m.MType)
+		return fmt.Errorf("%w: %s", errs.ErrUnknownMetricType, m.MType)
 	}
 	return nil
 }
 
 func (svc *MetricsService) validateCounterDeltaRequired(m models.Metrics) error {
 	if m.MType == models.Counter && m.Delta == nil {
-		return ErrMetricDeltaForCountRequired
+		return errs.ErrMetricDeltaForCountRequired
 	}
 	return nil
 }
 
 func (svc *MetricsService) validateGaugeValueRequired(m models.Metrics) error {
 	if m.MType == models.Gauge && m.Value == nil {
-		return ErrMetricValueForGaugeRequired
+		return errs.ErrMetricValueForGaugeRequired
 	}
 	return nil
 }
@@ -79,6 +64,6 @@ func (svc *MetricsService) validateMetricFull(m *models.Metrics) error {
 	case models.Counter:
 		return svc.validateCounterDeltaRequired(*m)
 	default:
-		return ErrUnknownMetricType
+		return errs.ErrUnknownMetricType
 	}
 }

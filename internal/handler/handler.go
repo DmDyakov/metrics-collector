@@ -1,13 +1,16 @@
 package handler
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"html/template"
+	"io"
 	"net/http"
 
 	"metrics-collector/internal/compress"
+	"metrics-collector/internal/errs"
 	models "metrics-collector/internal/model"
-	"metrics-collector/internal/service"
 	"metrics-collector/internal/templates"
 
 	"github.com/go-chi/chi/middleware"
@@ -16,21 +19,21 @@ import (
 )
 
 type MetricsService interface {
-	UpdateMetric(metricType, metricName, metricValue string) error
-	UpdateMetricV2(metric models.Metrics) (*models.Metrics, error)
+	UpdateMetricByArgs(metricType, metricName, metricValue string) (*models.Metrics, error)
+	UpdateMetricByJSON(metric models.Metrics) (*models.Metrics, error)
 	GetMetricValue(metricType, metricName string) (*string, error)
-	GetMetricValueV2(m models.Metrics) (*models.Metrics, error)
-	GetAllMetrics() (map[string]string, error)
+	GetMetric(m models.Metrics) (*models.Metrics, error)
+	GetAllMetrics() ([]models.Metrics, error)
 }
 
 type Handler struct {
 	service                MetricsService
-	logger                 *zap.SugaredLogger
+	logger                 *zap.Logger
 	gzip                   *compress.Gzip
 	allMetricsHTMLTemplate *template.Template
 }
 
-func NewHandler(service MetricsService, logger *zap.SugaredLogger, gzip *compress.Gzip) (*Handler, error) {
+func NewHandler(service MetricsService, logger *zap.Logger, gzip *compress.Gzip) (*Handler, error) {
 	tmpl, err := template.ParseFS(templates.FS, "metrics.html")
 	if err != nil {
 		return nil, err
@@ -53,28 +56,127 @@ func (h *Handler) NewMetricsRouter() chi.Router {
 	r.Get("/", h.RootHandle)
 	r.Get("/value/{type}/{name}", h.ValueHandle)
 	r.Post("/update/{type}/{name}/{value}", h.UpdateHandle)
-	r.Post("/value", h.ValueHandleV2)
-	r.Post("/update", h.UpdateHandleV2)
+	r.Post("/value", h.ValueByJSONHandle)
+	r.Post("/update", h.UpdateByJSONHandle)
 
 	return r
 }
 
-func handleServiceError(w http.ResponseWriter, err error) {
+func (h *Handler) RootHandle(w http.ResponseWriter, r *http.Request) {
+	allMetrics, err := h.service.GetAllMetrics()
+	if err != nil {
+		h.handleError(w, err)
+		return
+	}
+
+	var buf bytes.Buffer
+	if err := h.allMetricsHTMLTemplate.Execute(&buf, allMetrics); err != nil {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	buf.WriteTo(w)
+}
+
+func (h *Handler) ValueHandle(w http.ResponseWriter, r *http.Request) {
+	metricType := chi.URLParam(r, "type")
+	metricName := chi.URLParam(r, "name")
+
+	value, err := h.service.GetMetricValue(metricType, metricName)
+	if err != nil {
+		h.handleError(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	io.WriteString(w, *value)
+
+}
+
+func (h *Handler) UpdateHandle(w http.ResponseWriter, r *http.Request) {
+	metricType := chi.URLParam(r, "type")
+	metricName := chi.URLParam(r, "name")
+	metricValue := chi.URLParam(r, "value")
+
+	updated, err := h.service.UpdateMetricByArgs(metricType, metricName, metricValue)
+	if err != nil {
+		h.handleError(w, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	enc := json.NewEncoder(w)
+	if err := enc.Encode(updated); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusInternalServerError)
+		return
+	}
+}
+
+func (h *Handler) ValueByJSONHandle(w http.ResponseWriter, r *http.Request) {
+	var m models.Metrics
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(&m); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	metric, err := h.service.GetMetric(m)
+	if err != nil {
+		h.handleError(w, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	enc := json.NewEncoder(w)
+	if err := enc.Encode(metric); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusInternalServerError)
+		return
+	}
+}
+
+func (h *Handler) UpdateByJSONHandle(w http.ResponseWriter, r *http.Request) {
+	var m models.Metrics
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(&m); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	updatedMetric, err := h.service.UpdateMetricByJSON(m)
+	if err != nil {
+		h.handleError(w, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	enc := json.NewEncoder(w)
+	if err := enc.Encode(updatedMetric); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusInternalServerError)
+		return
+	}
+}
+
+func (h *Handler) handleError(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, service.ErrInvalidResponse):
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	case errors.Is(err, errs.ErrInvalidResponse):
+		h.logger.Error(err.Error())
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 
-	case errors.Is(err, service.ErrMetricNotFound):
-		http.Error(w, err.Error(), http.StatusNotFound)
+	case errors.Is(err, errs.ErrMetricNotFound):
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 
-	case errors.Is(err, service.ErrUnknownMetricType),
-		errors.Is(err, service.ErrMetricTypeMismatch),
-		errors.Is(err, service.ErrInvalidCounterValue),
-		errors.Is(err, service.ErrInvalidGaugeValue),
-		errors.Is(err, service.ErrMetricDeltaForCountRequired):
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	case errors.Is(err, errs.ErrUnknownMetricType),
+		errors.Is(err, errs.ErrMetricTypeMismatch),
+		errors.Is(err, errs.ErrInvalidCounterValue),
+		errors.Is(err, errs.ErrInvalidGaugeValue),
+		errors.Is(err, errs.ErrMetricDeltaForCountRequired):
+		h.logger.Error(err.Error())
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 
 	default:
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.logger.Error(err.Error())
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 	}
 }

@@ -10,7 +10,7 @@ import (
 
 func TestAgent_Poll(t *testing.T) {
 	metrics := make(Metrics)
-	logger := zap.NewNop().Sugar()
+	logger := zap.NewNop()
 	gzip := compress.NewGzip()
 	cfg := &config.AgentConfig{
 		PollInterval:   2,

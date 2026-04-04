@@ -17,7 +17,7 @@ func TestMemStorage_UpdateMetric(t *testing.T) {
 		Value: &testValue,
 	}
 
-	ms.UpdateMetric(testMetric)
+	ms.UpdateMetricByArgs(testMetric)
 
 	assert.Len(t, ms.metrics, 1)
 	assert.Equal(t, testMetric, ms.metrics["test_name"])

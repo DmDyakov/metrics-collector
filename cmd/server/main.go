@@ -11,11 +11,12 @@ import (
 	"metrics-collector/internal/logger"
 	"metrics-collector/internal/repository"
 	"metrics-collector/internal/service"
-	"metrics-collector/internal/worker"
+
+	"go.uber.org/zap"
 )
 
 func main() {
-	logger, err := logger.NewSugarZapLogger()
+	logger, err := logger.NewZapLogger()
 	if err != nil {
 		log.Fatalf("Failed to create server logger: %v", err)
 	}
@@ -23,34 +24,28 @@ func main() {
 
 	cfg, err := config.NewServerConfig(os.Args[1:])
 	if err != nil {
-		logger.Fatalf("Failed to create server config: %v", err)
+		logger.Fatal("Failed to create server config", zap.Error(err))
 	}
 
-	repo, err := repository.NewRepository(cfg)
+	repo, err := repository.NewRepository(cfg, logger)
 	if err != nil {
-		logger.Fatalw("Failed to create repository", "error", err)
-	}
-
-	if cfg.StoreInterval > 0 {
-		backupWorker := worker.NewBackupWorker(cfg.StoreInterval, repo, logger)
-		backupWorker.Start()
-		logger.Infof("Backup worker started with interval %d seconds", cfg.StoreInterval)
-	} else {
-		logger.Infof("Backup worker disabled (store_interval = 0)")
+		logger.Fatal("Failed to create repository", zap.Error(err))
 	}
 
 	svc := service.NewMetricsService(repo)
 	gzip := compress.NewGzip()
 	h, err := handler.NewHandler(svc, logger, gzip)
 	if err != nil {
-		logger.Fatalw("Failed to create handler", "error", err)
+		logger.Fatal("Failed to create handler", zap.Error(err))
 	}
 
 	r := h.NewMetricsRouter()
 
-	logger.Infof("Server started on %s...", cfg.ServerBaseURL)
+	logger.Info("Server started",
+		zap.String("url", cfg.ServerBaseURL),
+	)
 
 	if err := http.ListenAndServe(cfg.ServerBaseURL, r); err != nil {
-		logger.Fatalw("server failed", "error", err)
+		logger.Fatal("server failed", zap.Error(err))
 	}
 }

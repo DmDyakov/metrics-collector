@@ -3,6 +3,8 @@ package repository
 import (
 	"metrics-collector/internal/config"
 	models "metrics-collector/internal/model"
+
+	"go.uber.org/zap"
 )
 
 type Repository struct {
@@ -10,24 +12,33 @@ type Repository struct {
 	inMemoryStorage   *MemStorage
 	storeInterval     int
 	restore           bool
+	logger            *zap.Logger
 }
 
-func NewRepository(cfg *config.ServerConfig) (*Repository, error) {
+func NewRepository(cfg *config.ServerConfig, logger *zap.Logger) (*Repository, error) {
 	r := &Repository{
-		persistentStorage: NewFileStorage(cfg.FileStoragePath),
+		persistentStorage: newFileStorage(cfg.FileStoragePath),
 		inMemoryStorage:   NewMemStorage(),
 		storeInterval:     cfg.StoreInterval,
 		restore:           cfg.Restore,
+		logger:            logger,
 	}
 
 	if r.restore {
 		r.RestoreMetrics()
 	}
+
+	if cfg.StoreInterval > 0 {
+		r.startBackupWorker()
+	} else {
+		r.logger.Info("Backup worker disabled (store_interval = 0)")
+	}
+
 	return r, nil
 }
 
 func (r *Repository) RestoreMetrics() error {
-	metrics, err := r.persistentStorage.LoadAllMetricsFrom()
+	metrics, err := r.persistentStorage.loadAllMetricsFrom()
 	if err != nil {
 		return err
 	}
@@ -43,10 +54,10 @@ func (r *Repository) RestoreMetrics() error {
 }
 
 func (r *Repository) UpdateMetric(metric models.Metrics) (*models.Metrics, error) {
-	updated := r.inMemoryStorage.UpdateMetric(metric)
+	updated := r.inMemoryStorage.UpdateMetricByArgs(metric)
 
 	if r.storeInterval == 0 {
-		if err := r.persistentStorage.SaveSingleMetricTo(updated); err != nil {
+		if err := r.persistentStorage.saveSingleMetricTo(updated); err != nil {
 			return nil, err
 		}
 	}
@@ -62,7 +73,7 @@ func (r *Repository) GetMetric(metricName string) (*models.Metrics, bool) {
 	return r.inMemoryStorage.GetMetric(metricName)
 }
 
-func (r *Repository) BackupMetrics() error {
+func (r *Repository) backupMetrics() error {
 	metricsMap := r.inMemoryStorage.GetAllMetrics()
 
 	metrics := make([]models.Metrics, 0, len(metricsMap))
@@ -70,7 +81,7 @@ func (r *Repository) BackupMetrics() error {
 		metrics = append(metrics, metric)
 	}
 
-	if err := r.persistentStorage.ReplaceAllMetrics(metrics); err != nil {
+	if err := r.persistentStorage.replaceAllMetrics(metrics); err != nil {
 		return err
 	}
 

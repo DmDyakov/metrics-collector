@@ -31,7 +31,7 @@ func (ms *MemStorage) GetMetric(metricName string) (*models.Metrics, bool) {
 	return copyMetric(metric), true
 }
 
-func (ms *MemStorage) UpdateMetric(metric models.Metrics) *models.Metrics {
+func (ms *MemStorage) UpdateMetricByArgs(metric models.Metrics) *models.Metrics {
 	ms.metrics[metric.ID] = metric
 
 	result := copyMetric(ms.metrics[metric.ID])
