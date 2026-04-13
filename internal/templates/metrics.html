@@ -1,18 +1,24 @@
 <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Метрики</title>
-    </head>
-    <body>
-        <h1>Список метрик</h1>
-        {{ if . }}
-        <ul>
-            {{ range $name, $value := . }}
-            <li>{{ $name }}: {{ $value }}</li>
+<html>
+<head>
+    <title>Метрики</title>
+</head>
+<body>
+    <h1>Список метрик</h1>
+    {{ if . }}
+    <ul>
+        {{ range . }}
+        <li>{{ .ID }}: 
+            {{ if eq .MType "counter" }}
+                {{ .Delta }}
+            {{ else }}
+                {{ .Value }}
             {{ end }}
-        </ul>
-        {{ else }}
-        <p>Метрики не найдены</p>
+        </li>
         {{ end }}
-    </body>
-    </html>
+    </ul>
+    {{ else }}
+    <p>Метрики не найдены</p>
+    {{ end }}
+</body>
+</html>

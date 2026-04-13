@@ -1,10 +1,24 @@
 package agent
 
-import "testing"
+import (
+	"metrics-collector/internal/compress"
+	"metrics-collector/internal/config"
+	"testing"
 
-func TestPoll_AllMetricsPresent(t *testing.T) {
+	"go.uber.org/zap"
+)
+
+func TestAgent_Poll(t *testing.T) {
 	metrics := make(Metrics)
-	Poll(metrics, 1)
+	logger := zap.NewNop()
+	gzip := compress.NewGzip()
+	cfg := &config.AgentConfig{
+		PollInterval:   2,
+		ReportInterval: 10,
+		ServerBaseURL:  "localhost:8080",
+	}
+	a := NewAgent(cfg, logger, gzip)
+	a.Poll(metrics, 1)
 
 	expectedMetrics := []string{
 		"PollCount",

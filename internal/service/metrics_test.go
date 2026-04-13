@@ -2,98 +2,117 @@ package service
 
 import (
 	models "metrics-collector/internal/model"
+	"metrics-collector/internal/service/mocks"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 )
 
-type mockRepository struct {
-	data map[string]models.Metrics
-}
+func TestService_UpdateMetricByJSON(t *testing.T) {
 
-func newMockRepository() *mockRepository {
-	return &mockRepository{
-		data: make(map[string]models.Metrics),
-	}
-}
+	t.Run("positive: create new counter metric", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
 
-func (m *mockRepository) GetAllMetrics() map[string]models.Metrics {
-	return m.data
-}
+		mockRepo := mocks.NewMockRepository(ctrl)
+		svc := NewMetricsService(mockRepo)
 
-func (m *mockRepository) GetMetric(name string) (models.Metrics, bool) {
-	metric, ok := m.data[name]
-	return metric, ok
-}
+		inputDelta := int64(10)
+		input := models.Metrics{
+			ID:    "TestCount",
+			MType: models.Counter,
+			Delta: &inputDelta,
+		}
 
-func (m *mockRepository) UpdateMetric(metric models.Metrics) {
-	m.data[metric.ID] = metric
-}
+		mockRepo.EXPECT().
+			GetMetric("TestCount").
+			Return(nil, false)
 
-func TestUpdateMetric(t *testing.T) {
-	tests := []struct {
-		name      string
-		mType     string
-		mName     string
-		mValue    string
-		expectErr error
-		expectKey string
-	}{
-		{
-			name:      "valid gauge",
-			mType:     models.Gauge,
-			mName:     "Alloc",
-			mValue:    "10.5",
-			expectErr: nil,
-			expectKey: "Alloc",
-		},
-		{
-			name:      "valid counter",
-			mType:     models.Counter,
-			mName:     "PollCount",
-			mValue:    "5",
-			expectErr: nil,
-			expectKey: "PollCount",
-		},
-		{
-			name:      "invalid counter value",
-			mType:     models.Counter,
-			mName:     "PollCount",
-			mValue:    "abc",
-			expectErr: ErrInvalidCounterValue,
-		},
-		{
-			name:      "invalid gauge value",
-			mType:     models.Gauge,
-			mName:     "Alloc",
-			mValue:    "abc",
-			expectErr: ErrInvalidGaugeValue,
-		},
-		{
-			name:      "unknown type",
-			mType:     "unknown",
-			mName:     "Metric",
-			mValue:    "1",
-			expectErr: ErrUnknownMetricType,
-		},
-	}
+		mockRepo.EXPECT().
+			UpdateMetric(input).
+			Return(&input, nil)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		result, err := svc.UpdateMetricByJSON(input)
 
-			repo := newMockRepository()
-			svc := NewMetricsService(repo)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, *input.Delta, *result.Delta)
+		assert.Equal(t, input.MType, result.MType)
+		assert.Equal(t, input.ID, result.ID)
+		assert.Nil(t, result.Value)
+	})
 
-			err := svc.UpdateMetric(tt.mType, tt.mName, tt.mValue)
+	t.Run("positive: increment existing counter metric", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
 
-			if err != tt.expectErr {
-				t.Fatalf("expected error %v, got %v", tt.expectErr, err)
-			}
+		mockRepo := mocks.NewMockRepository(ctrl)
+		svc := NewMetricsService(mockRepo)
 
-			if tt.expectErr == nil {
-				if _, ok := repo.data[tt.expectKey]; !ok {
-					t.Fatalf("metric not saved in repo")
-				}
-			}
+		inputDelta := int64(10)
+		input := models.Metrics{
+			ID:    "TestCount",
+			MType: models.Counter,
+			Delta: &inputDelta,
+		}
 
-		})
-	}
+		outputDelta := int64(3)
+		existing := models.Metrics{
+			ID:    "TestCount",
+			MType: models.Counter,
+			Delta: &outputDelta,
+		}
+
+		sumDelta := *input.Delta + *existing.Delta
+		processed := models.Metrics{
+			ID:    "TestCount",
+			MType: models.Counter,
+			Delta: &sumDelta,
+		}
+
+		mockRepo.EXPECT().
+			GetMetric("TestCount").
+			Return(&existing, true)
+
+		mockRepo.EXPECT().
+			UpdateMetric(processed).
+			Return(&processed, nil)
+
+		result, err := svc.UpdateMetricByJSON(input)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, *result.Delta, *input.Delta+*existing.Delta)
+		assert.Equal(t, input.MType, result.MType)
+		assert.Equal(t, input.ID, result.ID)
+		assert.Nil(t, result.Value)
+	})
+
+	t.Run("positive: create or update new gauge metric", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockRepo := mocks.NewMockRepository(ctrl)
+		svc := NewMetricsService(mockRepo)
+
+		inputValue := float64(2.5)
+		input := models.Metrics{
+			ID:    "TestGauge",
+			MType: models.Gauge,
+			Value: &inputValue,
+		}
+
+		mockRepo.EXPECT().
+			UpdateMetric(input).
+			Return(&input, nil)
+
+		result, err := svc.UpdateMetricByJSON(input)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, input.MType, result.MType)
+		assert.Equal(t, input.ID, result.ID)
+		assert.Equal(t, *result.Value, *input.Value)
+		assert.Nil(t, result.Delta)
+	})
 }

@@ -1,25 +1,18 @@
 package service
 
 import (
-	"errors"
-	"strconv"
-
+	"fmt"
+	"metrics-collector/internal/errs"
 	models "metrics-collector/internal/model"
+	"strconv"
 )
 
+//go:generate mockgen -destination=mocks/mock_repository.go -package=mocks . Repository
 type Repository interface {
 	GetAllMetrics() map[string]models.Metrics
-	GetMetric(metricName string) (models.Metrics, bool)
-	UpdateMetric(metric models.Metrics)
+	GetMetric(metricName string) (*models.Metrics, bool)
+	UpdateMetric(metric models.Metrics) (*models.Metrics, error)
 }
-
-var (
-	ErrMetricTypeMismatch  = errors.New("metric type mismatch")
-	ErrUnknownMetricType   = errors.New("unknown metric type")
-	ErrMetricNotFound      = errors.New("metric not found")
-	ErrInvalidCounterValue = errors.New("invalid counter value, should be int")
-	ErrInvalidGaugeValue   = errors.New("invalid gauge value, should be float")
-)
 
 type MetricsService struct {
 	repo Repository
@@ -29,19 +22,143 @@ func NewMetricsService(repo Repository) *MetricsService {
 	return &MetricsService{repo: repo}
 }
 
-func (svc *MetricsService) UpdateMetric(metricType, metricName, metricValue string) error {
+func (svc *MetricsService) UpdateMetricByArgs(metricType, metricName, metricValue string) (*models.Metrics, error) {
+	input := models.Metrics{
+		ID:    metricName,
+		MType: metricType,
+	}
+
 	switch metricType {
 	case models.Counter:
 		delta, err := strconv.ParseInt(metricValue, 10, 64)
 		if err != nil {
-			return ErrInvalidCounterValue
+			return nil, fmt.Errorf("%w: %w", errs.ErrInvalidRequest, errs.ErrInvalidCounterValue)
 		}
 
-		existing, ok := svc.repo.GetMetric(metricName)
+		input.Delta = &delta
+
+		err = svc.validateMetricFull(&input)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", errs.ErrInvalidRequest, err)
+		}
+
+		existing, ok := svc.repo.GetMetric(input.ID)
+		if ok {
+			if existing.MType != models.Counter {
+				return nil, fmt.Errorf("%w: %w", errs.ErrInvalidResponse, errs.ErrMetricTypeMismatch)
+			}
+			if existing.Delta != nil {
+				delta += *existing.Delta
+			}
+		}
+
+		updated, err := svc.repo.UpdateMetric(models.Metrics{
+			ID:    input.ID,
+			MType: models.Counter,
+			Delta: &delta,
+		})
+
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", errs.ErrInvalidResponse, err)
+		}
+
+		return updated, nil
+
+	case models.Gauge:
+		value, err := strconv.ParseFloat(metricValue, 64)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", errs.ErrInvalidRequest, errs.ErrInvalidGaugeValue)
+		}
+
+		input.Value = &value
+
+		updated, err := svc.repo.UpdateMetric(input)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", errs.ErrInvalidResponse, err)
+		}
+
+		return updated, nil
+
+	default:
+		return nil, fmt.Errorf("%w: %w", errs.ErrInvalidRequest, errs.ErrUnknownMetricType)
+	}
+
+}
+
+func (svc *MetricsService) GetAllMetrics() ([]models.Metrics, error) {
+	metricsMap := svc.repo.GetAllMetrics()
+
+	metrics := make([]models.Metrics, 0, len(metricsMap))
+
+	for _, metric := range metricsMap {
+		metrics = append(metrics, metric)
+	}
+
+	return metrics, nil
+}
+
+func (svc *MetricsService) GetMetricValue(metricType, metricName string) (*string, error) {
+	input := models.Metrics{
+		ID:    metricName,
+		MType: metricType,
+	}
+
+	if err := svc.validateMetricBase(&input); err != nil {
+		return nil, fmt.Errorf("%w: %w", errs.ErrInvalidRequest, err)
+	}
+
+	m, ok := svc.repo.GetMetric(input.ID)
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", errs.ErrMetricNotFound, input.ID)
+	}
+
+	if m.MType != input.MType {
+		return nil, fmt.Errorf("%w: expected %s for id: %s, received %s",
+			errs.ErrMetricTypeMismatch,
+			m.MType,
+			input.ID,
+			input.MType)
+	}
+
+	value, err := formatToString(m)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errs.ErrInvalidResponse, err)
+	}
+
+	return &value, nil
+}
+
+func formatToString(m *models.Metrics) (string, error) {
+	switch m.MType {
+	case models.Counter:
+		return strconv.FormatInt(*m.Delta, 10), nil
+	case models.Gauge:
+		return strconv.FormatFloat(*m.Value, 'f', -1, 64), nil
+	default:
+		return "", errs.ErrUnknownMetricType
+	}
+}
+
+// New API (JSON-based)
+func (svc *MetricsService) UpdateMetricByJSON(input models.Metrics) (*models.Metrics, error) {
+	err := svc.validateMetricFull(&input)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errs.ErrInvalidRequest, err)
+	}
+
+	var m models.Metrics
+
+	switch input.MType {
+	case models.Counter:
+		delta := *input.Delta
+		existing, ok := svc.repo.GetMetric(input.ID)
 
 		if ok {
 			if existing.MType != models.Counter {
-				return ErrMetricTypeMismatch
+				return nil, fmt.Errorf("%w: expected %s for id: %s, received %s",
+					errs.ErrMetricTypeMismatch,
+					existing.MType, input.ID,
+					input.MType)
 			}
 
 			if existing.Delta != nil {
@@ -49,79 +166,45 @@ func (svc *MetricsService) UpdateMetric(metricType, metricName, metricValue stri
 			}
 		}
 
-		metric := models.Metrics{
-			ID:    metricName,
+		m = models.Metrics{
+			ID:    input.ID,
 			MType: models.Counter,
 			Delta: &delta,
 		}
 
-		svc.repo.UpdateMetric(metric)
-
 	case models.Gauge:
-		value, err := strconv.ParseFloat(metricValue, 64)
-		if err != nil {
-			return ErrInvalidGaugeValue
-		}
-
-		metric := models.Metrics{
-			ID:    metricName,
-			MType: models.Gauge,
-			Value: &value,
-		}
-
-		svc.repo.UpdateMetric(metric)
+		m = input
 
 	default:
-		return ErrUnknownMetricType
+		return nil, fmt.Errorf("%w: %w", errs.ErrInvalidResponse, errs.ErrUnknownMetricType)
 	}
 
-	return nil
+	updatedMetric, err := svc.repo.UpdateMetric(m)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errs.ErrInvalidResponse, err)
+	}
+
+	return updatedMetric, nil
 }
 
-func (svc *MetricsService) GetMetricValue(metricType, metricName string) (string, error) {
-	metric, ok := svc.repo.GetMetric(metricName)
+func (svc *MetricsService) GetMetric(input models.Metrics) (*models.Metrics, error) {
+	if err := svc.validateMetricBase(&input); err != nil {
+		return nil, fmt.Errorf("%w: %w", errs.ErrInvalidRequest, err)
+	}
+
+	m, ok := svc.repo.GetMetric(input.ID)
 	if !ok {
-		return "", ErrMetricNotFound
+		return nil, fmt.Errorf("%w: %s", errs.ErrMetricNotFound, input.ID)
 	}
 
-	if metric.MType != metricType {
-		return "", ErrMetricTypeMismatch
+	if m.MType != input.MType {
+		return nil, fmt.Errorf("%w: %w", errs.ErrInvalidResponse, errs.ErrMetricTypeMismatch)
 	}
 
-	switch metricType {
-	case models.Gauge:
-		if metric.Value == nil {
-			return "", ErrInvalidGaugeValue
-		}
-		return strconv.FormatFloat(*metric.Value, 'f', -1, 64), nil
-	case models.Counter:
-		if metric.Delta == nil {
-			return "", ErrInvalidCounterValue
-		}
-		return strconv.FormatInt(*metric.Delta, 10), nil
-	default:
-		return "", ErrUnknownMetricType
-	}
-}
-
-func (svc *MetricsService) GetAllMetrics() (map[string]string, error) {
-	metrics := svc.repo.GetAllMetrics()
-
-	allMetrics := make(map[string]string, len(metrics))
-
-	for name, metric := range metrics {
-		switch metric.MType {
-		case models.Gauge:
-			if metric.Value != nil {
-				allMetrics[name] = strconv.FormatFloat(*metric.Value, 'f', -1, 64)
-			}
-		case models.Counter:
-			if metric.Delta != nil {
-				allMetrics[name] = strconv.FormatInt(*metric.Delta, 10)
-			}
-		}
+	err := svc.validateMetricFull(m)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errs.ErrInvalidResponse, err)
 	}
 
-	return allMetrics, nil
-
+	return m, nil
 }
