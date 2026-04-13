@@ -2,11 +2,13 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"html/template"
 	"io"
 	"net/http"
+	"time"
 
 	"metrics-collector/internal/compress"
 	"metrics-collector/internal/errs"
@@ -24,6 +26,7 @@ type MetricsService interface {
 	GetMetricValue(metricType, metricName string) (*string, error)
 	GetMetric(m models.Metrics) (*models.Metrics, error)
 	GetAllMetrics() ([]models.Metrics, error)
+	Ping(ctx context.Context) error
 }
 
 type Handler struct {
@@ -54,12 +57,27 @@ func (h *Handler) NewMetricsRouter() chi.Router {
 	r.Use(h.WithCompressing)
 
 	r.Get("/", h.RootHandle)
+	r.Get("/ping", h.PingHandle)
 	r.Get("/value/{type}/{name}", h.ValueHandle)
 	r.Post("/update/{type}/{name}/{value}", h.UpdateHandle)
 	r.Post("/value", h.ValueByJSONHandle)
 	r.Post("/update", h.UpdateByJSONHandle)
 
 	return r
+}
+
+func (h *Handler) PingHandle(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err := h.service.Ping(ctx)
+	if err != nil {
+		h.logger.Error("Database ping failed", zap.Error(err))
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+	}
+
+	w.WriteHeader(http.StatusOK)
+
 }
 
 func (h *Handler) RootHandle(w http.ResponseWriter, r *http.Request) {
@@ -71,7 +89,7 @@ func (h *Handler) RootHandle(w http.ResponseWriter, r *http.Request) {
 
 	var buf bytes.Buffer
 	if err := h.allMetricsHTMLTemplate.Execute(&buf, allMetrics); err != nil {
-		http.Error(w, "internal server error", http.StatusInternalServerError)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 

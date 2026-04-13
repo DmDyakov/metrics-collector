@@ -18,6 +18,7 @@ type ServerConfig struct {
 	StoreInterval   int    `env:"STORE_INTERVAL"`
 	FileStoragePath string `env:"FILE_STORAGE_PATH"`
 	Restore         bool   `env:"RESTORE"`
+	DatabaseDSN     string `env:"DATABASE_DSN"`
 }
 
 const (
@@ -27,29 +28,20 @@ const (
 	defaultStoreInterval   = 300
 	defaultFileStoragePath = "store.json"
 	defaultRestore         = false
+	defaultDatabaseDSN     = "postgres://DmtiryDyakov:@localhost:5432/metrics?sslmode=disable"
 )
 
 func NewAgentConfig(args []string) (*AgentConfig, error) {
 	fs := flag.NewFlagSet("agent", flag.ContinueOnError)
 
-	var (
-		serverBaseURLFlag  string
-		pollIntervalFlag   int
-		reportIntervalFlag int
-	)
+	cfg := &AgentConfig{}
 
-	fs.StringVar(&serverBaseURLFlag, "a", defaultServerBaseURL, "address and port to run server")
-	fs.IntVar(&pollIntervalFlag, "p", defaultPollInterval, "poll interval")
-	fs.IntVar(&reportIntervalFlag, "r", defaultReportInterval, "report interval")
+	fs.StringVar(&cfg.ServerBaseURL, "a", defaultServerBaseURL, "address and port to run server")
+	fs.IntVar(&cfg.PollInterval, "p", defaultPollInterval, "poll interval")
+	fs.IntVar(&cfg.ReportInterval, "r", defaultReportInterval, "report interval")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, err
-	}
-
-	cfg := &AgentConfig{
-		ServerBaseURL:  serverBaseURLFlag,
-		PollInterval:   pollIntervalFlag,
-		ReportInterval: reportIntervalFlag,
 	}
 
 	err := env.Parse(cfg)
@@ -79,27 +71,16 @@ func NewAgentConfig(args []string) (*AgentConfig, error) {
 func NewServerConfig(args []string) (*ServerConfig, error) {
 	fs := flag.NewFlagSet("server", flag.ContinueOnError)
 
-	var (
-		serverBaseURLFlag   string
-		storeIntervalFlag   int
-		fileStoragePathFlag string
-		restoreFlag         bool
-	)
+	cfg := &ServerConfig{}
 
-	fs.StringVar(&serverBaseURLFlag, "a", defaultServerBaseURL, "address and port to run server")
-	fs.IntVar(&storeIntervalFlag, "i", defaultStoreInterval, "store interval")
-	fs.StringVar(&fileStoragePathFlag, "f", defaultFileStoragePath, "file storage path")
-	fs.BoolVar(&restoreFlag, "r", defaultRestore, "restore")
+	fs.StringVar(&cfg.ServerBaseURL, "a", defaultServerBaseURL, "address and port to run server")
+	fs.IntVar(&cfg.StoreInterval, "i", defaultStoreInterval, "store interval")
+	fs.StringVar(&cfg.FileStoragePath, "f", defaultFileStoragePath, "file storage path")
+	fs.BoolVar(&cfg.Restore, "r", defaultRestore, "restore")
+	fs.StringVar(&cfg.DatabaseDSN, "d", defaultDatabaseDSN, "database DSN")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, err
-	}
-
-	cfg := &ServerConfig{
-		ServerBaseURL:   serverBaseURLFlag,
-		StoreInterval:   storeIntervalFlag,
-		FileStoragePath: fileStoragePathFlag,
-		Restore:         restoreFlag,
 	}
 
 	err := env.Parse(cfg)
@@ -117,6 +98,10 @@ func NewServerConfig(args []string) (*ServerConfig, error) {
 
 	if cfg.FileStoragePath == "" {
 		return nil, fmt.Errorf("file storage path can not be empty")
+	}
+
+	if cfg.DatabaseDSN == "" {
+		return nil, fmt.Errorf("database DSN can not be empty")
 	}
 
 	return cfg, nil

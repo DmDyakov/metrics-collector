@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"metrics-collector/internal/errs"
 	models "metrics-collector/internal/model"
@@ -12,6 +13,7 @@ type Repository interface {
 	GetAllMetrics() map[string]models.Metrics
 	GetMetric(metricName string) (*models.Metrics, bool)
 	UpdateMetric(metric models.Metrics) (*models.Metrics, error)
+	Ping(ctx context.Context) error
 }
 
 type MetricsService struct {
@@ -20,6 +22,10 @@ type MetricsService struct {
 
 func NewMetricsService(repo Repository) *MetricsService {
 	return &MetricsService{repo: repo}
+}
+
+func (svc *MetricsService) Ping(ctx context.Context) error {
+	return svc.repo.Ping(ctx)
 }
 
 func (svc *MetricsService) UpdateMetricByArgs(metricType, metricName, metricValue string) (*models.Metrics, error) {

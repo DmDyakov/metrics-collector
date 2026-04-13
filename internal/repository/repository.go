@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"metrics-collector/internal/config"
 	models "metrics-collector/internal/model"
 
@@ -10,15 +11,22 @@ import (
 type Repository struct {
 	persistentStorage *FileStorage
 	inMemoryStorage   *MemStorage
+	postgresStorage   *PostgresStorage
 	storeInterval     int
 	restore           bool
 	logger            *zap.Logger
 }
 
 func NewRepository(cfg *config.ServerConfig, logger *zap.Logger) (*Repository, error) {
+	pgStorage, err := newPostgresStorage(cfg.DatabaseDSN)
+	if err != nil {
+		logger.Error("Error postgres creating", zap.Error(err))
+	}
+
 	r := &Repository{
 		persistentStorage: newFileStorage(cfg.FileStoragePath),
 		inMemoryStorage:   NewMemStorage(),
+		postgresStorage:   pgStorage,
 		storeInterval:     cfg.StoreInterval,
 		restore:           cfg.Restore,
 		logger:            logger,
@@ -35,6 +43,10 @@ func NewRepository(cfg *config.ServerConfig, logger *zap.Logger) (*Repository, e
 	}
 
 	return r, nil
+}
+
+func (r *Repository) Ping(ctx context.Context) error {
+	return r.postgresStorage.db.PingContext(ctx)
 }
 
 func (r *Repository) RestoreMetrics() error {

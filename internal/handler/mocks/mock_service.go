@@ -10,6 +10,7 @@
 package mocks
 
 import (
+	context "context"
 	models "metrics-collector/internal/model"
 	reflect "reflect"
 
@@ -83,6 +84,20 @@ func (m *MockMetricsService) GetMetricValue(metricType, metricName string) (*str
 func (mr *MockMetricsServiceMockRecorder) GetMetricValue(metricType, metricName any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetricValue", reflect.TypeOf((*MockMetricsService)(nil).GetMetricValue), metricType, metricName)
+}
+
+// Ping mocks base method.
+func (m *MockMetricsService) Ping(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Ping", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Ping indicates an expected call of Ping.
+func (mr *MockMetricsServiceMockRecorder) Ping(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Ping", reflect.TypeOf((*MockMetricsService)(nil).Ping), ctx)
 }
 
 // UpdateMetricByArgs mocks base method.
