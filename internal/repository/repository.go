@@ -29,7 +29,7 @@ func NewRepository(cfg *config.ServerConfig, logger *zap.Logger) (*Repository, e
 	}
 
 	if cfg.StoreInterval > 0 {
-		r.startBackupWorker()
+		go r.startBackupWorker()
 	} else {
 		r.logger.Info("Backup worker disabled (store_interval = 0)")
 	}
