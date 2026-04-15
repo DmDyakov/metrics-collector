@@ -20,28 +20,35 @@ type Repository struct {
 }
 
 func NewRepository(cfg *config.ServerConfig, logger *zap.Logger) (*Repository, error) {
-	pgs, err := newPostgresStorage(cfg.DatabaseDSN)
-	if err != nil {
-		logger.Warn("PostgreSQL is unavailable", zap.Error(err))
-		pgs = nil
-	}
-
-	var fls *FileStorage
-	if pgs == nil {
-		fls, err = newFileStorage(cfg.FileStoragePath)
-		if err != nil {
-			logger.Warn("File is unavailable", zap.Error(err))
-			fls = nil
-		}
-	}
-
 	r := &Repository{
 		inMemoryStorage: newMemStorage(),
-		fileStorage:     fls,
-		postgresStorage: pgs,
+		fileStorage:     nil,
+		postgresStorage: nil,
 		storeInterval:   cfg.StoreInterval,
 		restore:         cfg.Restore,
 		logger:          logger,
+	}
+
+	if cfg.DatabaseDSN == "" {
+		logger.Info("Database DSN not provided, skipping PostgreSQL")
+	} else {
+		logger.Info("Attempting to connect to database...")
+		pgs, err := newPostgresStorage(cfg.DatabaseDSN)
+		if err != nil {
+			return nil, fmt.Errorf("postgres connection failed: %w", err)
+		}
+		r.postgresStorage = pgs
+	}
+
+	if r.postgresStorage == nil {
+		logger.Info("PostgreSQL unavailable, falling back to file storage")
+
+		if cfg.FileStoragePath == "" {
+			logger.Info("File storage path not set, using in-memory storage only")
+		} else {
+			fls := newFileStorage(cfg.FileStoragePath)
+			r.fileStorage = fls
+		}
 	}
 
 	if r.fileStorage == nil && r.postgresStorage == nil {

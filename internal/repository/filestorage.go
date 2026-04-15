@@ -12,14 +12,10 @@ type FileStorage struct {
 	file string
 }
 
-func newFileStorage(file string) (*FileStorage, error) {
-	if file == "" {
-		return nil, errors.New("Error fileStorage creating")
-	}
-
+func newFileStorage(file string) *FileStorage {
 	return &FileStorage{
 		file: file,
-	}, nil
+	}
 }
 
 func (f *FileStorage) saveSingleMetricTo(metric *models.Metrics) error {

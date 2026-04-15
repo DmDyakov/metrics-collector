@@ -3,8 +3,11 @@ package config
 import (
 	"flag"
 	"fmt"
+	"log"
+	"os"
 
 	"github.com/caarlos0/env/v11"
+	"github.com/joho/godotenv"
 )
 
 type AgentConfig struct {
@@ -44,6 +47,7 @@ func NewAgentConfig(args []string) (*AgentConfig, error) {
 		return nil, err
 	}
 
+	loadDotEnv()
 	err := env.Parse(cfg)
 	if err != nil {
 		return nil, err
@@ -79,6 +83,7 @@ func NewServerConfig(args []string) (*ServerConfig, error) {
 	fs.BoolVar(&cfg.Restore, "r", defaultRestore, "restore")
 	fs.StringVar(&cfg.DatabaseDSN, "d", defaultDatabaseDSN, "database DSN")
 
+	loadDotEnv()
 	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}
@@ -97,4 +102,12 @@ func NewServerConfig(args []string) (*ServerConfig, error) {
 	}
 
 	return cfg, nil
+}
+
+func loadDotEnv() {
+	if _, err := os.Stat(".env"); err == nil {
+		if err := godotenv.Load(); err != nil {
+			log.Printf("Warning: could not load .env file: %v", err)
+		}
+	}
 }
