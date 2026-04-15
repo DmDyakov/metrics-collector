@@ -6,36 +6,20 @@ import (
 	"io"
 	models "metrics-collector/internal/model"
 	"os"
-	"time"
-
-	"go.uber.org/zap"
 )
 
 type FileStorage struct {
 	file string
 }
 
-func (r *Repository) startBackupWorker() {
-	ticker := time.NewTicker(time.Duration(r.storeInterval) * time.Second)
-	defer ticker.Stop()
-
-	r.logger.Info("Backup worker started",
-		zap.Int("interval_seconds", r.storeInterval),
-	)
-
-	for range ticker.C {
-		if err := r.backupMetrics(); err != nil {
-			r.logger.Error("backup failed", zap.Error(err))
-		} else {
-			r.logger.Debug("backup completed successfully")
-		}
+func newFileStorage(file string) (*FileStorage, error) {
+	if file == "" {
+		return nil, errors.New("Error fileStorage creating")
 	}
-}
 
-func newFileStorage(file string) *FileStorage {
 	return &FileStorage{
 		file: file,
-	}
+	}, nil
 }
 
 func (f *FileStorage) saveSingleMetricTo(metric *models.Metrics) error {

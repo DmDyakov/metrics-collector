@@ -8,7 +8,7 @@ type MemStorage struct {
 	metrics map[string]models.Metrics
 }
 
-func NewMemStorage() *MemStorage {
+func newMemStorage() *MemStorage {
 	return &MemStorage{
 		metrics: make(map[string]models.Metrics),
 	}

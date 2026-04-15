@@ -8,7 +8,7 @@ import (
 )
 
 func TestMemStorage_UpdateMetric(t *testing.T) {
-	ms := NewMemStorage()
+	ms := newMemStorage()
 
 	testValue := 42.5
 	testMetric := models.Metrics{

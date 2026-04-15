@@ -26,9 +26,9 @@ const (
 	defaultPollInterval    = 2
 	defaultReportInterval  = 10
 	defaultStoreInterval   = 300
-	defaultFileStoragePath = "store.json"
+	defaultFileStoragePath = ""
 	defaultRestore         = false
-	defaultDatabaseDSN     = "postgres://DmtiryDyakov:@localhost:5432/metrics?sslmode=disable"
+	defaultDatabaseDSN     = ""
 )
 
 func NewAgentConfig(args []string) (*AgentConfig, error) {
@@ -94,14 +94,6 @@ func NewServerConfig(args []string) (*ServerConfig, error) {
 
 	if cfg.StoreInterval < 0 {
 		return nil, fmt.Errorf("store interval must be non-negative")
-	}
-
-	if cfg.FileStoragePath == "" {
-		return nil, fmt.Errorf("file storage path can not be empty")
-	}
-
-	if cfg.DatabaseDSN == "" {
-		return nil, fmt.Errorf("database DSN can not be empty")
 	}
 
 	return cfg, nil

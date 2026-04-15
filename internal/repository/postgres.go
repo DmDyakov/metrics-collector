@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	models "metrics-collector/internal/model"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -27,4 +28,9 @@ func newPostgresStorage(databaseDSN string) (*PostgresStorage, error) {
 	return &PostgresStorage{
 		db: db,
 	}, nil
+}
+
+func (p *PostgresStorage) saveSingleMetricTo(metric *models.Metrics) error {
+	//TODO: Добавить реализацию
+	return nil
 }
