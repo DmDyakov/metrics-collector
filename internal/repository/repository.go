@@ -56,7 +56,9 @@ func NewRepository(cfg *config.ServerConfig, logger *zap.Logger) (*Repository, e
 	}
 
 	if r.restore {
-		r.restoreMetrics()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		r.restoreMetrics(ctx)
 	}
 
 	if cfg.StoreInterval > 0 {
@@ -80,7 +82,7 @@ func (r *Repository) Ping(ctx context.Context) error {
 
 // --- Metrics CRUD -------------------------------------------------
 
-func (r *Repository) UpdateMetric(metric models.Metrics) (*models.Metrics, error) {
+func (r *Repository) UpdateMetric(ctx context.Context, metric models.Metrics) (*models.Metrics, error) {
 	updated := r.inMemoryStorage.UpdateMetricByArgs(metric)
 
 	if r.storeInterval != 0 {
@@ -88,13 +90,13 @@ func (r *Repository) UpdateMetric(metric models.Metrics) (*models.Metrics, error
 	}
 
 	if r.postgresStorage != nil {
-		if err := r.postgresStorage.saveSingleMetricTo(updated); err != nil {
+		if err := r.postgresStorage.saveMetric(ctx, updated); err != nil {
 			return nil, err
 		}
 	}
 
 	if r.fileStorage != nil {
-		if err := r.fileStorage.saveSingleMetricTo(updated); err != nil {
+		if err := r.fileStorage.saveMetric(updated); err != nil {
 			return nil, err
 		}
 	}
@@ -131,27 +133,28 @@ func (r *Repository) startBackupWorker() {
 }
 
 func (r *Repository) backupMetrics() error {
-	metricsMap := r.inMemoryStorage.GetAllMetrics()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
+	metricsMap := r.inMemoryStorage.GetAllMetrics()
 	metrics := make([]models.Metrics, 0, len(metricsMap))
 	for _, metric := range metricsMap {
 		metrics = append(metrics, metric)
 	}
 
 	if r.postgresStorage != nil {
-		// TODO: Заменить на запрос к бд
-		return nil
+		return r.postgresStorage.saveAllMetrics(ctx, metrics)
 	}
 
-	if err := r.fileStorage.replaceAllMetrics(metrics); err != nil {
-		return err
+	if r.fileStorage != nil {
+		return r.fileStorage.saveAllMetrics(metrics)
 	}
 
 	return nil
 }
 
-func (r *Repository) restoreMetrics() error {
-	metrics, err := r.loadAllMetricsFromStorage()
+func (r *Repository) restoreMetrics(ctx context.Context) error {
+	metrics, err := r.loadAllMetricsFromStorage(ctx)
 	if err != nil {
 		return err
 	}
@@ -166,14 +169,13 @@ func (r *Repository) restoreMetrics() error {
 	return nil
 }
 
-func (r *Repository) loadAllMetricsFromStorage() ([]models.Metrics, error) {
+func (r *Repository) loadAllMetricsFromStorage(ctx context.Context) ([]models.Metrics, error) {
 	if r.postgresStorage != nil {
-		// TODO: Заменить на запрос к бд
-		return []models.Metrics{}, nil
+		return r.postgresStorage.loadAllMetrics(ctx)
 	}
 
 	if r.fileStorage != nil {
-		return r.fileStorage.loadAllMetricsFrom()
+		return r.fileStorage.loadAllMetrics()
 	}
 
 	return []models.Metrics{}, nil

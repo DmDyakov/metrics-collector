@@ -21,8 +21,8 @@ import (
 )
 
 type MetricsService interface {
-	UpdateMetricByArgs(metricType, metricName, metricValue string) (*models.Metrics, error)
-	UpdateMetricByJSON(metric models.Metrics) (*models.Metrics, error)
+	UpdateMetricByArgs(ctx context.Context, metricType, metricName, metricValue string) (*models.Metrics, error)
+	UpdateMetricByJSON(ctx context.Context, metric models.Metrics) (*models.Metrics, error)
 	GetMetricValue(metricType, metricName string) (*string, error)
 	GetMetric(m models.Metrics) (*models.Metrics, error)
 	GetAllMetrics() ([]models.Metrics, error)
@@ -118,7 +118,10 @@ func (h *Handler) UpdateHandle(w http.ResponseWriter, r *http.Request) {
 	metricName := chi.URLParam(r, "name")
 	metricValue := chi.URLParam(r, "value")
 
-	updated, err := h.service.UpdateMetricByArgs(metricType, metricName, metricValue)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	updated, err := h.service.UpdateMetricByArgs(ctx, metricType, metricName, metricValue)
 	if err != nil {
 		h.handleError(w, err)
 		return
@@ -155,6 +158,9 @@ func (h *Handler) ValueByJSONHandle(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateByJSONHandle(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	var m models.Metrics
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&m); err != nil {
@@ -162,7 +168,7 @@ func (h *Handler) UpdateByJSONHandle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updatedMetric, err := h.service.UpdateMetricByJSON(m)
+	updatedMetric, err := h.service.UpdateMetricByJSON(ctx, m)
 	if err != nil {
 		h.handleError(w, err)
 		return

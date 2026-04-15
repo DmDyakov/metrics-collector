@@ -18,8 +18,8 @@ func newFileStorage(file string) *FileStorage {
 	}
 }
 
-func (f *FileStorage) saveSingleMetricTo(metric *models.Metrics) error {
-	metrics, err := f.loadAllMetricsFrom()
+func (f *FileStorage) saveMetric(metric *models.Metrics) error {
+	metrics, err := f.loadAllMetrics()
 	if err != nil {
 		return err
 	}
@@ -37,10 +37,10 @@ func (f *FileStorage) saveSingleMetricTo(metric *models.Metrics) error {
 		metrics = append(metrics, *metric)
 	}
 
-	return f.replaceAllMetrics(metrics)
+	return f.saveAllMetrics(metrics)
 }
 
-func (f *FileStorage) replaceAllMetrics(metrics []models.Metrics) error {
+func (f *FileStorage) saveAllMetrics(metrics []models.Metrics) error {
 	data, err := json.MarshalIndent(metrics, "", "  ")
 	if err != nil {
 		return err
@@ -49,7 +49,7 @@ func (f *FileStorage) replaceAllMetrics(metrics []models.Metrics) error {
 	return os.WriteFile(f.file, data, 0644)
 }
 
-func (f *FileStorage) loadAllMetricsFrom() ([]models.Metrics, error) {
+func (f *FileStorage) loadAllMetrics() ([]models.Metrics, error) {
 	file, err := os.OpenFile(f.file, os.O_RDONLY|os.O_CREATE, 0666)
 	if err != nil {
 		return nil, err

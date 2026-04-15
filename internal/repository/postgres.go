@@ -43,8 +43,44 @@ func newPostgresStorage(databaseDSN string) (*PostgresStorage, error) {
 	}, nil
 }
 
-func (p *PostgresStorage) saveSingleMetricTo(metric *models.Metrics) error {
+func (p *PostgresStorage) saveMetric(ctx context.Context, m *models.Metrics) error {
+	switch m.MType {
+	case models.Counter:
+		if m.Delta == nil {
+			return nil
+		}
+		_, err := p.db.ExecContext(ctx,
+			`INSERT INTO counters (name, value) VALUES ($1, $2)
+			 ON CONFLICT (name) DO UPDATE SET value = counters.value + EXCLUDED.value`,
+			m.ID, *m.Delta)
+		return err
+
+	case models.Gauge:
+		if m.Value == nil {
+			return nil
+		}
+		_, err := p.db.ExecContext(ctx,
+			`INSERT INTO gauges (name, value) VALUES ($1, $2)
+			 ON CONFLICT (name) DO UPDATE SET value = EXCLUDED.value`,
+			m.ID, *m.Value)
+		return err
+	}
+
+	return nil
+}
+
+func (p *PostgresStorage) loadAllMetrics(ctx context.Context) ([]models.Metrics, error) {
 	//TODO: Добавить реализацию
+	return []models.Metrics{}, nil
+}
+
+func (p *PostgresStorage) saveAllMetrics(ctx context.Context, metrics []models.Metrics) error {
+	for _, m := range metrics {
+		if err := p.saveMetric(ctx, &m); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

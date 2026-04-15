@@ -12,7 +12,7 @@ import (
 type Repository interface {
 	GetAllMetrics() map[string]models.Metrics
 	GetMetric(metricName string) (*models.Metrics, bool)
-	UpdateMetric(metric models.Metrics) (*models.Metrics, error)
+	UpdateMetric(ctx context.Context, metric models.Metrics) (*models.Metrics, error)
 	Ping(ctx context.Context) error
 }
 
@@ -28,7 +28,7 @@ func (svc *MetricsService) Ping(ctx context.Context) error {
 	return svc.repo.Ping(ctx)
 }
 
-func (svc *MetricsService) UpdateMetricByArgs(metricType, metricName, metricValue string) (*models.Metrics, error) {
+func (svc *MetricsService) UpdateMetricByArgs(ctx context.Context, metricType, metricName, metricValue string) (*models.Metrics, error) {
 	input := models.Metrics{
 		ID:    metricName,
 		MType: metricType,
@@ -58,7 +58,7 @@ func (svc *MetricsService) UpdateMetricByArgs(metricType, metricName, metricValu
 			}
 		}
 
-		updated, err := svc.repo.UpdateMetric(models.Metrics{
+		updated, err := svc.repo.UpdateMetric(ctx, models.Metrics{
 			ID:    input.ID,
 			MType: models.Counter,
 			Delta: &delta,
@@ -78,7 +78,7 @@ func (svc *MetricsService) UpdateMetricByArgs(metricType, metricName, metricValu
 
 		input.Value = &value
 
-		updated, err := svc.repo.UpdateMetric(input)
+		updated, err := svc.repo.UpdateMetric(ctx, input)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %w", errs.ErrInvalidResponse, err)
 		}
@@ -146,7 +146,7 @@ func formatToString(m *models.Metrics) (string, error) {
 }
 
 // New API (JSON-based)
-func (svc *MetricsService) UpdateMetricByJSON(input models.Metrics) (*models.Metrics, error) {
+func (svc *MetricsService) UpdateMetricByJSON(ctx context.Context, input models.Metrics) (*models.Metrics, error) {
 	err := svc.validateMetricFull(&input)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errs.ErrInvalidRequest, err)
@@ -185,7 +185,7 @@ func (svc *MetricsService) UpdateMetricByJSON(input models.Metrics) (*models.Met
 		return nil, fmt.Errorf("%w: %w", errs.ErrInvalidResponse, errs.ErrUnknownMetricType)
 	}
 
-	updatedMetric, err := svc.repo.UpdateMetric(m)
+	updatedMetric, err := svc.repo.UpdateMetric(ctx, m)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errs.ErrInvalidResponse, err)
 	}
