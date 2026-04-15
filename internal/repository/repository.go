@@ -44,7 +44,7 @@ func NewRepository(cfg *config.ServerConfig, logger *zap.Logger) (*Repository, e
 		logger:          logger,
 	}
 
-	if r.fileStorage == nil || r.postgresStorage == nil {
+	if r.fileStorage == nil && r.postgresStorage == nil {
 		return r, nil
 	}
 
@@ -61,6 +61,8 @@ func NewRepository(cfg *config.ServerConfig, logger *zap.Logger) (*Repository, e
 	return r, nil
 }
 
+// --- Health Check -------------------------------------------------
+
 func (r *Repository) Ping(ctx context.Context) error {
 	if r.postgresStorage != nil {
 		return r.postgresStorage.db.PingContext(ctx)
@@ -68,10 +70,12 @@ func (r *Repository) Ping(ctx context.Context) error {
 	return nil
 }
 
+// --- Metrics CRUD -------------------------------------------------
+
 func (r *Repository) UpdateMetric(metric models.Metrics) (*models.Metrics, error) {
 	updated := r.inMemoryStorage.UpdateMetricByArgs(metric)
 
-	if r.storeInterval != 0 || (r.postgresStorage == nil && r.fileStorage == nil) {
+	if r.storeInterval != 0 {
 		return updated, nil
 	}
 
@@ -81,8 +85,10 @@ func (r *Repository) UpdateMetric(metric models.Metrics) (*models.Metrics, error
 		}
 	}
 
-	if err := r.fileStorage.saveSingleMetricTo(updated); err != nil {
-		return nil, err
+	if r.fileStorage != nil {
+		if err := r.fileStorage.saveSingleMetricTo(updated); err != nil {
+			return nil, err
+		}
 	}
 
 	return updated, nil
@@ -97,7 +103,7 @@ func (r *Repository) GetMetric(metricName string) (*models.Metrics, bool) {
 	return r.inMemoryStorage.GetMetric(metricName)
 }
 
-// --------------------------------------------
+// --- Background Backup & Restore ----------------------------------
 
 func (r *Repository) startBackupWorker() {
 	ticker := time.NewTicker(time.Duration(r.storeInterval) * time.Second)
