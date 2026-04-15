@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"metrics-collector/internal/config"
 	models "metrics-collector/internal/model"
 	"time"
@@ -37,8 +38,7 @@ func NewRepository(cfg *config.ServerConfig, logger *zap.Logger) (*Repository, e
 	r := &Repository{
 		inMemoryStorage: newMemStorage(),
 		fileStorage:     fls,
-		//TODO: заменить на pgs
-		postgresStorage: nil,
+		postgresStorage: pgs,
 		storeInterval:   cfg.StoreInterval,
 		restore:         cfg.Restore,
 		logger:          logger,
@@ -67,7 +67,8 @@ func (r *Repository) Ping(ctx context.Context) error {
 	if r.postgresStorage != nil {
 		return r.postgresStorage.db.PingContext(ctx)
 	}
-	return nil
+
+	return fmt.Errorf("PostgreSQL is unavailable")
 }
 
 // --- Metrics CRUD -------------------------------------------------
