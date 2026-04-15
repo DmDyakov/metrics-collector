@@ -85,16 +85,16 @@ func (mr *MockRepositoryMockRecorder) Ping(ctx any) *gomock.Call {
 }
 
 // UpdateMetric mocks base method.
-func (m *MockRepository) UpdateMetric(metric models.Metrics) (*models.Metrics, error) {
+func (m *MockRepository) UpdateMetric(ctx context.Context, metric models.Metrics) (*models.Metrics, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateMetric", metric)
+	ret := m.ctrl.Call(m, "UpdateMetric", ctx, metric)
 	ret0, _ := ret[0].(*models.Metrics)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // UpdateMetric indicates an expected call of UpdateMetric.
-func (mr *MockRepositoryMockRecorder) UpdateMetric(metric any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) UpdateMetric(ctx, metric any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMetric", reflect.TypeOf((*MockRepository)(nil).UpdateMetric), metric)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMetric", reflect.TypeOf((*MockRepository)(nil).UpdateMetric), ctx, metric)
 }
