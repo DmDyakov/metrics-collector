@@ -195,13 +195,15 @@ func (svc *MetricsService) UpdateMetricByJSON(ctx context.Context, input models.
 }
 
 func (svc *MetricsService) UpdateMetrics(ctx context.Context, batch []models.Metrics) (*int, error) {
-	for idx, input := range batch {
-
-		err := svc.validateMetricFull(&input)
-		if err != nil {
+	for _, input := range batch {
+		if err := svc.validateMetricFull(&input); err != nil {
 			return nil, fmt.Errorf("%w: %w", errs.ErrInvalidRequest, err)
 		}
+	}
 
+	deduped := svc.deduplicateBatch(batch)
+
+	for idx, input := range deduped {
 		if input.MType == models.Counter {
 			existing, ok := svc.repo.GetMetric(input.ID)
 			if !ok {
@@ -216,12 +218,11 @@ func (svc *MetricsService) UpdateMetrics(ctx context.Context, batch []models.Met
 			}
 
 			sum := *input.Delta + *existing.Delta
-			batch[idx].Delta = &sum
-
+			deduped[idx].Delta = &sum
 		}
 	}
 
-	count, err := svc.repo.SaveMetricsBatch(ctx, batch)
+	count, err := svc.repo.SaveMetricsBatch(ctx, deduped)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errs.ErrInvalidResponse, err)
 	}
@@ -249,4 +250,30 @@ func (svc *MetricsService) GetMetric(input models.Metrics) (*models.Metrics, err
 	}
 
 	return m, nil
+}
+
+func (svc *MetricsService) deduplicateBatch(batch []models.Metrics) []models.Metrics {
+	aggregated := make(map[string]*models.Metrics)
+
+	for _, m := range batch {
+		key := m.ID + ":" + m.MType
+
+		if existing, ok := aggregated[key]; ok {
+			if m.MType == models.Counter {
+				sum := *existing.Delta + *m.Delta
+				existing.Delta = &sum
+			} else {
+				existing.Value = m.Value
+			}
+		} else {
+			copied := m
+			aggregated[key] = &copied
+		}
+	}
+
+	result := make([]models.Metrics, 0, len(aggregated))
+	for _, m := range aggregated {
+		result = append(result, *m)
+	}
+	return result
 }
