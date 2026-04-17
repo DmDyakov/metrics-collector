@@ -6,6 +6,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"metrics-collector/internal/errs"
 	models "metrics-collector/internal/model"
 	"time"
 
@@ -47,11 +48,14 @@ func (p *PostgresStorage) saveMetric(ctx context.Context, m *models.Metrics) err
 	switch m.MType {
 	case models.Counter:
 		if m.Delta == nil {
-			return nil
+			return errs.ErrMetricDeltaForCountRequired
 		}
 		_, err := p.db.ExecContext(ctx,
-			`INSERT INTO counters (name, value) VALUES ($1, $2)
-			 ON CONFLICT (name) DO UPDATE SET value = counters.value + EXCLUDED.value`,
+			`INSERT INTO counters (name, value, updated_dt) 
+			VALUES ($1, $2, NOW())
+			ON CONFLICT (name) DO UPDATE SET 
+					value = EXCLUDED.value,
+					updated_dt = NOW()`,
 			m.ID, *m.Delta)
 		return err
 
@@ -60,8 +64,11 @@ func (p *PostgresStorage) saveMetric(ctx context.Context, m *models.Metrics) err
 			return nil
 		}
 		_, err := p.db.ExecContext(ctx,
-			`INSERT INTO gauges (name, value) VALUES ($1, $2)
-			 ON CONFLICT (name) DO UPDATE SET value = EXCLUDED.value`,
+			`INSERT INTO gauges (name, value, updated_dt) 
+			VALUES ($1, $2, NOW())
+				ON CONFLICT (name) DO UPDATE SET 
+					value = EXCLUDED.value, 
+					updated_dt = NOW()`,
 			m.ID, *m.Value)
 		return err
 	}
@@ -74,14 +81,56 @@ func (p *PostgresStorage) loadAllMetrics(ctx context.Context) ([]models.Metrics,
 	return []models.Metrics{}, nil
 }
 
-func (p *PostgresStorage) saveAllMetrics(ctx context.Context, metrics []models.Metrics) error {
-	for _, m := range metrics {
-		if err := p.saveMetric(ctx, &m); err != nil {
-			return err
-		}
+func (p *PostgresStorage) saveMetricsBatch(ctx context.Context, metrics []models.Metrics) (*int, error) {
+	count := 0
+	tx, err := p.db.Begin()
+	if err != nil {
+		return &count, err
 	}
+	defer tx.Rollback()
 
-	return nil
+	for _, m := range metrics {
+		switch m.MType {
+		case models.Counter:
+			if m.Delta == nil {
+				tx.Rollback()
+				return nil, errs.ErrMetricDeltaForCountRequired
+			}
+			_, err := p.db.ExecContext(ctx,
+				`INSERT INTO counters (name, value, updated_dt) 
+				VALUES ($1, $2, NOW())
+				ON CONFLICT (name) DO UPDATE SET 
+					value = EXCLUDED.value,
+					updated_dt = NOW()`,
+				m.ID, *m.Delta)
+			if err != nil {
+				tx.Rollback()
+				return nil, err
+			}
+			count++
+
+		case models.Gauge:
+			if m.Value == nil {
+				return nil, errs.ErrMetricValueForGaugeRequired
+			}
+			_, err := p.db.ExecContext(ctx,
+				`INSERT INTO gauges (name, value, updated_dt) 
+				VALUES ($1, $2, NOW())
+			 	ON CONFLICT (name) DO UPDATE SET 
+					value = EXCLUDED.value, 
+					updated_dt = NOW()`,
+				m.ID, *m.Value)
+			if err != nil {
+				tx.Rollback()
+				return nil, err
+			}
+			count++
+		}
+
+	}
+	tx.Commit()
+
+	return &count, nil
 }
 
 func runMigrations(db *sql.DB) error {

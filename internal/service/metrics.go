@@ -12,7 +12,8 @@ import (
 type Repository interface {
 	GetAllMetrics() map[string]models.Metrics
 	GetMetric(metricName string) (*models.Metrics, bool)
-	UpdateMetric(ctx context.Context, metric models.Metrics) (*models.Metrics, error)
+	SaveMetric(ctx context.Context, metric models.Metrics) (*models.Metrics, error)
+	SaveMetricsBatch(ctx context.Context, metrics []models.Metrics) (*int, error)
 	Ping(ctx context.Context) error
 }
 
@@ -58,7 +59,7 @@ func (svc *MetricsService) UpdateMetricByArgs(ctx context.Context, metricType, m
 			}
 		}
 
-		updated, err := svc.repo.UpdateMetric(ctx, models.Metrics{
+		updated, err := svc.repo.SaveMetric(ctx, models.Metrics{
 			ID:    input.ID,
 			MType: models.Counter,
 			Delta: &delta,
@@ -78,7 +79,7 @@ func (svc *MetricsService) UpdateMetricByArgs(ctx context.Context, metricType, m
 
 		input.Value = &value
 
-		updated, err := svc.repo.UpdateMetric(ctx, input)
+		updated, err := svc.repo.SaveMetric(ctx, input)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %w", errs.ErrInvalidResponse, err)
 		}
@@ -185,12 +186,47 @@ func (svc *MetricsService) UpdateMetricByJSON(ctx context.Context, input models.
 		return nil, fmt.Errorf("%w: %w", errs.ErrInvalidResponse, errs.ErrUnknownMetricType)
 	}
 
-	updatedMetric, err := svc.repo.UpdateMetric(ctx, m)
+	updatedMetric, err := svc.repo.SaveMetric(ctx, m)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errs.ErrInvalidResponse, err)
 	}
 
 	return updatedMetric, nil
+}
+
+func (svc *MetricsService) UpdateMetrics(ctx context.Context, batch []models.Metrics) (*int, error) {
+	for idx, input := range batch {
+
+		err := svc.validateMetricFull(&input)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", errs.ErrInvalidRequest, err)
+		}
+
+		if input.MType == models.Counter {
+			existing, ok := svc.repo.GetMetric(input.ID)
+			if !ok {
+				continue
+			}
+
+			if existing.MType != models.Counter {
+				return nil, fmt.Errorf("%w: expected %s for id: %s, received %s",
+					errs.ErrMetricTypeMismatch,
+					existing.MType, input.ID,
+					input.MType)
+			}
+
+			sum := *input.Delta + *existing.Delta
+			batch[idx].Delta = &sum
+
+		}
+	}
+
+	count, err := svc.repo.SaveMetricsBatch(ctx, batch)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errs.ErrInvalidResponse, err)
+	}
+
+	return count, nil
 }
 
 func (svc *MetricsService) GetMetric(input models.Metrics) (*models.Metrics, error) {

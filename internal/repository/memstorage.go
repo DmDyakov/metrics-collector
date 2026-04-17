@@ -39,8 +39,13 @@ func (ms *MemStorage) UpdateMetricByArgs(metric models.Metrics) *models.Metrics 
 	return result
 }
 
-func (ms *MemStorage) replaceMetrics(metrics map[string]models.Metrics) {
-	ms.metrics = metrics
+func (ms *MemStorage) saveMetricsBatch(metrics []models.Metrics) *int {
+	for _, m := range metrics {
+		ms.metrics[m.ID] = m
+	}
+	savedCount := len(metrics)
+
+	return &savedCount
 }
 
 func copyMetric(m models.Metrics) *models.Metrics {

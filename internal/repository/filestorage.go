@@ -37,16 +37,25 @@ func (f *FileStorage) saveMetric(metric *models.Metrics) error {
 		metrics = append(metrics, *metric)
 	}
 
-	return f.saveAllMetrics(metrics)
-}
-
-func (f *FileStorage) saveAllMetrics(metrics []models.Metrics) error {
-	data, err := json.MarshalIndent(metrics, "", "  ")
+	_, err = f.saveMetricsBatch(metrics)
 	if err != nil {
 		return err
 	}
 
-	return os.WriteFile(f.file, data, 0644)
+	return nil
+}
+
+func (f *FileStorage) saveMetricsBatch(metrics []models.Metrics) (*int, error) {
+	data, err := json.MarshalIndent(metrics, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+
+	os.WriteFile(f.file, data, 0644)
+
+	savedCount := len(metrics)
+
+	return &savedCount, nil
 }
 
 func (f *FileStorage) loadAllMetrics() ([]models.Metrics, error) {

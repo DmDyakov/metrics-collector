@@ -28,7 +28,7 @@ const (
 	defaultServerBaseURL   = "localhost:8080"
 	defaultPollInterval    = 2
 	defaultReportInterval  = 10
-	defaultStoreInterval   = 300
+	defaultStoreInterval   = 20
 	defaultFileStoragePath = ""
 	defaultRestore         = false
 	defaultDatabaseDSN     = ""

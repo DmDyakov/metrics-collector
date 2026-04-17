@@ -129,3 +129,18 @@ func (mr *MockMetricsServiceMockRecorder) UpdateMetricByJSON(ctx, metric any) *g
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMetricByJSON", reflect.TypeOf((*MockMetricsService)(nil).UpdateMetricByJSON), ctx, metric)
 }
+
+// UpdateMetrics mocks base method.
+func (m *MockMetricsService) UpdateMetrics(ctx context.Context, metrics []models.Metrics) (*int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateMetrics", ctx, metrics)
+	ret0, _ := ret[0].(*int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateMetrics indicates an expected call of UpdateMetrics.
+func (mr *MockMetricsServiceMockRecorder) UpdateMetrics(ctx, metrics any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMetrics", reflect.TypeOf((*MockMetricsService)(nil).UpdateMetrics), ctx, metrics)
+}

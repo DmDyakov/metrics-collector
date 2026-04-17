@@ -33,7 +33,7 @@ func TestService_UpdateMetricByJSON(t *testing.T) {
 			Return(nil, false)
 
 		mockRepo.EXPECT().
-			UpdateMetric(gomock.Any(), input).
+			SaveMetric(gomock.Any(), input).
 			Return(&input, nil)
 
 		result, err := svc.UpdateMetricByJSON(ctx, input)
@@ -79,7 +79,7 @@ func TestService_UpdateMetricByJSON(t *testing.T) {
 			Return(&existing, true)
 
 		mockRepo.EXPECT().
-			UpdateMetric(gomock.Any(), processed).
+			SaveMetric(gomock.Any(), processed).
 			Return(&processed, nil)
 
 		result, err := svc.UpdateMetricByJSON(ctx, input)
@@ -106,7 +106,7 @@ func TestService_UpdateMetricByJSON(t *testing.T) {
 		}
 
 		mockRepo.EXPECT().
-			UpdateMetric(gomock.Any(), input).
+			SaveMetric(gomock.Any(), input).
 			Return(&input, nil)
 
 		result, err := svc.UpdateMetricByJSON(ctx, input)

@@ -82,7 +82,7 @@ func (r *Repository) Ping(ctx context.Context) error {
 
 // --- Metrics CRUD -------------------------------------------------
 
-func (r *Repository) UpdateMetric(ctx context.Context, metric models.Metrics) (*models.Metrics, error) {
+func (r *Repository) SaveMetric(ctx context.Context, metric models.Metrics) (*models.Metrics, error) {
 	updated := r.inMemoryStorage.UpdateMetricByArgs(metric)
 
 	if r.storeInterval != 0 {
@@ -111,6 +111,34 @@ func (r *Repository) GetAllMetrics() map[string]models.Metrics {
 
 func (r *Repository) GetMetric(metricName string) (*models.Metrics, bool) {
 	return r.inMemoryStorage.GetMetric(metricName)
+}
+
+func (r *Repository) SaveMetricsBatch(ctx context.Context, metrics []models.Metrics) (*int, error) {
+	count := r.inMemoryStorage.saveMetricsBatch(metrics)
+
+	if r.storeInterval != 0 {
+		return count, nil
+	}
+
+	if r.postgresStorage != nil {
+		c, err := r.postgresStorage.saveMetricsBatch(ctx, metrics)
+		if err != nil {
+			return nil, err
+		}
+
+		count = c
+	}
+
+	if r.fileStorage != nil {
+		c, err := r.fileStorage.saveMetricsBatch(metrics)
+		if err != nil {
+			return nil, err
+		}
+
+		count = c
+	}
+
+	return count, nil
 }
 
 // --- Background Backup & Restore ----------------------------------
@@ -143,11 +171,17 @@ func (r *Repository) backupMetrics() error {
 	}
 
 	if r.postgresStorage != nil {
-		return r.postgresStorage.saveAllMetrics(ctx, metrics)
+		_, err := r.postgresStorage.saveMetricsBatch(ctx, metrics)
+		if err != nil {
+			return err
+		}
 	}
 
 	if r.fileStorage != nil {
-		return r.fileStorage.saveAllMetrics(metrics)
+		_, err := r.fileStorage.saveMetricsBatch(metrics)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -159,24 +193,25 @@ func (r *Repository) restoreMetrics(ctx context.Context) error {
 		return err
 	}
 
-	metricsMap := make(map[string]models.Metrics, len(metrics))
-	for _, metric := range metrics {
-		metricsMap[metric.ID] = metric
-	}
-
-	r.inMemoryStorage.replaceMetrics(metricsMap)
+	r.inMemoryStorage.saveMetricsBatch(metrics)
 
 	return nil
 }
 
 func (r *Repository) loadAllMetricsFromStorage(ctx context.Context) ([]models.Metrics, error) {
+	metrics := []models.Metrics{}
+
 	if r.postgresStorage != nil {
-		return r.postgresStorage.loadAllMetrics(ctx)
+		ms, err := r.postgresStorage.loadAllMetrics(ctx)
+		if err != nil {
+			return nil, err
+		}
+		metrics = ms
 	}
 
-	if r.fileStorage != nil {
+	if r.fileStorage != nil && len(metrics) == 0 {
 		return r.fileStorage.loadAllMetrics()
 	}
 
-	return []models.Metrics{}, nil
+	return metrics, nil
 }
