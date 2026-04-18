@@ -116,7 +116,7 @@ func (svc *MetricsService) GetMetricValue(metricType, metricName string) (*strin
 
 	m, ok := svc.repo.GetMetric(input.ID)
 	if !ok {
-		return nil, fmt.Errorf("%w: %s", errs.ErrMetricNotFound, input.ID)
+		return nil, &errs.MetricNotFoundError{Type: input.MType, Name: input.ID}
 	}
 
 	if m.MType != input.MType {
@@ -237,7 +237,7 @@ func (svc *MetricsService) GetMetric(input models.Metrics) (*models.Metrics, err
 
 	m, ok := svc.repo.GetMetric(input.ID)
 	if !ok {
-		return nil, fmt.Errorf("%w: %s", errs.ErrMetricNotFound, input.ID)
+		return nil, &errs.MetricNotFoundError{Type: input.MType, Name: input.ID}
 	}
 
 	if m.MType != input.MType {

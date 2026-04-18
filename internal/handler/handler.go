@@ -218,13 +218,15 @@ func (h *Handler) UpdatesHandle(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleError(w http.ResponseWriter, err error) {
+	var errMetricNotFound *errs.MetricNotFoundError
+
 	switch {
 	case errors.Is(err, errs.ErrInvalidResponse):
 		h.logger.Error(err.Error())
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 
-	case errors.Is(err, errs.ErrMetricNotFound):
-		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+	case errors.As(err, &errMetricNotFound):
+		http.Error(w, errMetricNotFound.Error(), http.StatusNotFound)
 
 	case errors.Is(err, errs.ErrUnknownMetricType),
 		errors.Is(err, errs.ErrMetricTypeMismatch),

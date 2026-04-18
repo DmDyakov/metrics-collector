@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -54,15 +55,15 @@ func NewAgentConfig(args []string) (*AgentConfig, error) {
 	}
 
 	if cfg.ServerBaseURL == "" {
-		return nil, fmt.Errorf("server URL can not be empty")
+		return nil, errors.New("server URL can not be empty")
 	}
 
 	if cfg.PollInterval <= 0 {
-		return nil, fmt.Errorf("poll interval must be positive")
+		return nil, errors.New("poll interval must be positive")
 	}
 
 	if cfg.ReportInterval <= 0 {
-		return nil, fmt.Errorf("report interval must be positive")
+		return nil, errors.New("report interval must be positive")
 	}
 
 	if cfg.ReportInterval < cfg.PollInterval {
@@ -94,11 +95,11 @@ func NewServerConfig(args []string) (*ServerConfig, error) {
 	}
 
 	if cfg.ServerBaseURL == "" {
-		return nil, fmt.Errorf("server URL can not be empty")
+		return nil, errors.New("server URL can not be empty")
 	}
 
 	if cfg.StoreInterval < 0 {
-		return nil, fmt.Errorf("store interval must be non-negative")
+		return nil, errors.New("store interval must be non-negative")
 	}
 
 	return cfg, nil

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"metrics-collector/internal/config"
 	models "metrics-collector/internal/model"
@@ -77,7 +78,7 @@ func (r *Repository) Ping(ctx context.Context) error {
 		return r.postgresStorage.db.PingContext(ctx)
 	}
 
-	return fmt.Errorf("PostgreSQL is unavailable")
+	return errors.New("PostgreSQL is unavailable")
 }
 
 // --- Metrics CRUD -------------------------------------------------

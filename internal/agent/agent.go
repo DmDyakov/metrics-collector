@@ -2,11 +2,15 @@ package agent
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand/v2"
+	"net"
 	"net/http"
 	"runtime"
+	"syscall"
 	"time"
 
 	"metrics-collector/internal/compress"
@@ -104,6 +108,99 @@ type MetricRequest struct {
 	Value *float64 `json:"value,omitempty"` // для Gauge
 }
 
+func (a *Agent) Send(metrics RawMetrics) {
+	a.logger.Info("--- Отправка метрик ---")
+	start := time.Now()
+	batch := prepareBatch(metrics)
+	if len(batch) <= 0 {
+		return
+	}
+
+	url := fmt.Sprintf("http://%s/updates", a.cfg.ServerBaseURL)
+	method := "POST"
+	body, err := a.compressBatch(batch)
+	if err != nil {
+		a.logger.Error("error compress batch", zap.Error(err))
+		return
+	}
+
+	doRequest := func() (*http.Response, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(body))
+		if err != nil {
+			a.logger.Error("failed to build request",
+				zap.String("uri", url),
+				zap.String("method", method),
+				zap.Error(err),
+			)
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Encoding", "gzip")
+		req.Header.Set("Accept-Encoding", "gzip")
+
+		return a.client.Do(req)
+	}
+
+	doRequestWithRetry := func() error {
+		delays := []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second}
+		const MAX_ATTEMPTS = 4
+
+		for attempt := 1; attempt <= MAX_ATTEMPTS; attempt++ {
+			resp, err := doRequest()
+			if resp != nil {
+				defer resp.Body.Close()
+			}
+
+			if err == nil && resp.StatusCode == http.StatusOK {
+				return nil
+			}
+
+			var respError error
+			if resp == nil {
+				respError = errors.New("error server connection")
+			} else {
+				respError = fmt.Errorf("unexpected server status: %s", resp.Status)
+			}
+
+			if !isRetriable(resp, err) || attempt == MAX_ATTEMPTS {
+				return respError
+			}
+
+			delay := delays[attempt-1]
+			a.logger.Info("retrying after delay",
+				zap.Int("attempt", attempt),
+				zap.Duration("delay", delay),
+				zap.String("uri", url),
+				zap.String("method", method),
+				zap.Error(respError),
+			)
+
+			time.Sleep(delay)
+		}
+		return nil
+	}
+
+	if err := doRequestWithRetry(); err != nil {
+		a.logger.Error("failed to send request",
+			zap.String("uri", url),
+			zap.String("method", method),
+			zap.Error(err),
+		)
+	} else {
+		duration := time.Since(start)
+		a.logger.Info("request sent",
+			zap.String("uri", url),
+			zap.String("method", "POST"),
+			zap.Duration("duration", duration),
+		)
+	}
+}
+
+// ----- utils ----------------------
+
 func prepareBatch(m RawMetrics) []MetricRequest {
 	batch := make([]MetricRequest, 0, len(m))
 	for k, v := range m {
@@ -126,61 +223,42 @@ func prepareBatch(m RawMetrics) []MetricRequest {
 	return batch
 }
 
-func (a *Agent) Send(metrics RawMetrics) {
-	a.logger.Info("--- Отправка метрик ---")
-
-	batch := prepareBatch(metrics)
-
-	if len(batch) <= 0 {
-		return
-	}
-
-	start := time.Now()
-
-	url := fmt.Sprintf("http://%s/updates", a.cfg.ServerBaseURL)
-
+func (a *Agent) compressBatch(batch []MetricRequest) ([]byte, error) {
 	jsonPayload, err := json.Marshal(batch)
 	if err != nil {
-		a.logger.Error("Error JSON marshaling", zap.Error(err))
-		return
+		a.logger.Error("error JSON marshaling", zap.Error(err))
+		return nil, err
 	}
-
 	compressedJson, err := a.gzip.Compress(jsonPayload)
 	if err != nil {
-		a.logger.Error("Error JSON compressing", zap.Error(err))
-		return
+		a.logger.Error("error JSON compressing", zap.Error(err))
+		return nil, err
 	}
 
-	method := "POST"
-	req, err := http.NewRequest(method, url, bytes.NewReader(compressedJson))
+	return compressedJson, nil
+}
+
+func isRetriable(resp *http.Response, err error) bool {
 	if err != nil {
-		a.logger.Error("failed to build request",
-			zap.String("uri", url),
-			zap.String("method", method),
-			zap.Error(err),
-		)
-		return
+		var netErr net.Error
+		if errors.As(err, &netErr) && netErr.Timeout() {
+			return true
+		}
+
+		if errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ECONNRESET) {
+			return true
+		}
+		return false
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Content-Encoding", "gzip")
-	req.Header.Set("Accept-Encoding", "gzip")
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		a.logger.Error("failed to send request",
-			zap.String("uri", url),
-			zap.String("method", method),
-			zap.Error(err),
-		)
-		return
+	switch resp.StatusCode {
+	case http.StatusRequestTimeout,
+		http.StatusBadGateway,
+		http.StatusServiceUnavailable,
+		http.StatusGatewayTimeout,
+		http.StatusTooManyRequests:
+		return true
+	default:
+		return false
 	}
-	resp.Body.Close()
-
-	duration := time.Since(start)
-	a.logger.Info("request sent",
-		zap.String("uri", url),
-		zap.String("method", "POST"),
-		zap.Duration("duration", duration),
-	)
 }
