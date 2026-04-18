@@ -59,6 +59,7 @@ func NewRepository(cfg *config.ServerConfig, logger *zap.Logger) (*Repository, e
 	if r.restore {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
+		logger.Info("Restore metrics started...")
 		r.restoreMetrics(ctx)
 	}
 
@@ -201,6 +202,7 @@ func (r *Repository) restoreMetrics(ctx context.Context) error {
 
 func (r *Repository) loadAllMetricsFromStorage(ctx context.Context) ([]models.Metrics, error) {
 	metrics := []models.Metrics{}
+	start := time.Now()
 
 	if r.postgresStorage != nil {
 		ms, err := r.postgresStorage.loadAllMetrics(ctx)
@@ -208,10 +210,23 @@ func (r *Repository) loadAllMetricsFromStorage(ctx context.Context) ([]models.Me
 			return nil, err
 		}
 		metrics = ms
+		r.logger.Info("Metrics restored",
+			zap.Int("from_db", len(ms)),
+			zap.Duration("took", time.Since(start)),
+		)
 	}
 
 	if r.fileStorage != nil && len(metrics) == 0 {
-		return r.fileStorage.loadAllMetrics()
+		r.logger.Info("Metrics has been loaded from file storage")
+		ms, err := r.fileStorage.loadAllMetrics()
+		if err != nil {
+			return nil, err
+		}
+		r.logger.Info("Metrics restored",
+			zap.Int("from_filestorage", len(ms)),
+			zap.Duration("took", time.Since(start)),
+		)
+		return ms, nil
 	}
 
 	return metrics, nil
