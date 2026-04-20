@@ -76,6 +76,7 @@ func (h *Handler) PingHandle(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.logger.Error("Database ping failed", zap.Error(err))
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -91,6 +92,7 @@ func (h *Handler) RootHandle(w http.ResponseWriter, r *http.Request) {
 
 	var buf bytes.Buffer
 	if err := h.allMetricsHTMLTemplate.Execute(&buf, allMetrics); err != nil {
+		h.logger.Error("failed to execute metrics HTML template", zap.Error(err))
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
