@@ -34,11 +34,7 @@ func newPostgresStorage(databaseDSN string) (*PostgresStorage, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	ping := func() (struct{}, error) {
-		return struct{}{}, db.PingContext(ctx)
-	}
-	_, err = doWithRetry(ctx, ping)
-	if err != nil {
+	if err = db.PingContext(ctx); err != nil {
 		return nil, err
 	}
 
@@ -140,10 +136,9 @@ func (p *PostgresStorage) saveMetricsBatch(ctx context.Context, metrics []models
 			switch m.MType {
 			case models.Counter:
 				if m.Delta == nil {
-					tx.Rollback()
 					return nil, errs.ErrMetricDeltaForCountRequired
 				}
-				_, err := p.db.ExecContext(ctx,
+				_, err := tx.ExecContext(ctx,
 					`INSERT INTO counters (name, value, updated_dt) 
 				VALUES ($1, $2, NOW())
 				ON CONFLICT (name) DO UPDATE SET 
@@ -151,7 +146,6 @@ func (p *PostgresStorage) saveMetricsBatch(ctx context.Context, metrics []models
 					updated_dt = NOW()`,
 					m.ID, *m.Delta)
 				if err != nil {
-					tx.Rollback()
 					return nil, err
 				}
 				savedMetricsCount++
@@ -160,7 +154,7 @@ func (p *PostgresStorage) saveMetricsBatch(ctx context.Context, metrics []models
 				if m.Value == nil {
 					return nil, errs.ErrMetricValueForGaugeRequired
 				}
-				_, err := p.db.ExecContext(ctx,
+				_, err := tx.ExecContext(ctx,
 					`INSERT INTO gauges (name, value, updated_dt) 
 				VALUES ($1, $2, NOW())
 			 	ON CONFLICT (name) DO UPDATE SET 
@@ -168,7 +162,6 @@ func (p *PostgresStorage) saveMetricsBatch(ctx context.Context, metrics []models
 					updated_dt = NOW()`,
 					m.ID, *m.Value)
 				if err != nil {
-					tx.Rollback()
 					return nil, err
 				}
 				savedMetricsCount++
@@ -210,8 +203,12 @@ func runMigrations(db *sql.DB) error {
 func isRetriableDBError(err error) bool {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
-		// Класс 08 - Connection Exception
 		if pgerrcode.IsConnectionException(pgErr.Code) {
+			return true
+		}
+
+		switch pgErr.Code {
+		case "40001", "40P01", "57P01", "53300", "55P03":
 			return true
 		}
 	}
