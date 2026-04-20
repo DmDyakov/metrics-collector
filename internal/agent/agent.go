@@ -146,14 +146,12 @@ func (a *Agent) Send(metrics RawMetrics) {
 
 	doRequestWithRetry := func() error {
 		delays := []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second}
-		const MAX_ATTEMPTS = 4
+		const maxAttempts = 4
 
-		for attempt := 1; attempt <= MAX_ATTEMPTS; attempt++ {
+		for attempt := 1; attempt <= maxAttempts; attempt++ {
 			resp, err := doRequest()
 			if resp != nil {
-			if resp != nil {
 				resp.Body.Close()
-			}
 			}
 
 			if err == nil && resp.StatusCode == http.StatusOK {
@@ -167,7 +165,7 @@ func (a *Agent) Send(metrics RawMetrics) {
 				respError = fmt.Errorf("unexpected server status: %s", resp.Status)
 			}
 
-			if !isRetriable(resp, err) || attempt == MAX_ATTEMPTS {
+			if !isRetriable(resp, err) || attempt == maxAttempts {
 				return respError
 			}
 
