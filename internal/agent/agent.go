@@ -151,7 +151,9 @@ func (a *Agent) Send(metrics RawMetrics) {
 		for attempt := 1; attempt <= MAX_ATTEMPTS; attempt++ {
 			resp, err := doRequest()
 			if resp != nil {
-				defer resp.Body.Close()
+			if resp != nil {
+				resp.Body.Close()
+			}
 			}
 
 			if err == nil && resp.StatusCode == http.StatusOK {
