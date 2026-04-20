@@ -106,9 +106,7 @@ func NewServerConfig(args []string) (*ServerConfig, error) {
 }
 
 func loadDotEnv() {
-	if _, err := os.Stat(".env"); err == nil {
-		if err := godotenv.Load(); err != nil {
-			log.Printf("Warning: could not load .env file: %v", err)
-		}
+	if err := godotenv.Load(); err != nil && !errors.Is(err, os.ErrNotExist) {
+		log.Printf("Warning: could not load .env file: %v", err)
 	}
 }
