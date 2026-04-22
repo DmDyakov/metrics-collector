@@ -2,11 +2,13 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"html/template"
 	"io"
 	"net/http"
+	"time"
 
 	"metrics-collector/internal/compress"
 	"metrics-collector/internal/errs"
@@ -19,11 +21,13 @@ import (
 )
 
 type MetricsService interface {
-	UpdateMetricByArgs(metricType, metricName, metricValue string) (*models.Metrics, error)
-	UpdateMetricByJSON(metric models.Metrics) (*models.Metrics, error)
+	UpdateMetricByArgs(ctx context.Context, metricType, metricName, metricValue string) (*models.Metrics, error)
+	UpdateMetricByJSON(ctx context.Context, metric models.Metrics) (*models.Metrics, error)
+	UpdateMetrics(ctx context.Context, metrics []models.Metrics) (*int, error)
 	GetMetricValue(metricType, metricName string) (*string, error)
 	GetMetric(m models.Metrics) (*models.Metrics, error)
 	GetAllMetrics() ([]models.Metrics, error)
+	Ping(ctx context.Context) error
 }
 
 type Handler struct {
@@ -54,12 +58,29 @@ func (h *Handler) NewMetricsRouter() chi.Router {
 	r.Use(h.WithCompressing)
 
 	r.Get("/", h.RootHandle)
+	r.Get("/ping", h.PingHandle)
 	r.Get("/value/{type}/{name}", h.ValueHandle)
 	r.Post("/update/{type}/{name}/{value}", h.UpdateHandle)
 	r.Post("/value", h.ValueByJSONHandle)
 	r.Post("/update", h.UpdateByJSONHandle)
+	r.Post("/updates", h.UpdatesHandle)
 
 	return r
+}
+
+func (h *Handler) PingHandle(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err := h.service.Ping(ctx)
+	if err != nil {
+		h.logger.Error("Database ping failed", zap.Error(err))
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+
 }
 
 func (h *Handler) RootHandle(w http.ResponseWriter, r *http.Request) {
@@ -71,7 +92,8 @@ func (h *Handler) RootHandle(w http.ResponseWriter, r *http.Request) {
 
 	var buf bytes.Buffer
 	if err := h.allMetricsHTMLTemplate.Execute(&buf, allMetrics); err != nil {
-		http.Error(w, "internal server error", http.StatusInternalServerError)
+		h.logger.Error("failed to execute metrics HTML template", zap.Error(err))
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 
@@ -100,7 +122,10 @@ func (h *Handler) UpdateHandle(w http.ResponseWriter, r *http.Request) {
 	metricName := chi.URLParam(r, "name")
 	metricValue := chi.URLParam(r, "value")
 
-	updated, err := h.service.UpdateMetricByArgs(metricType, metricName, metricValue)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	updated, err := h.service.UpdateMetricByArgs(ctx, metricType, metricName, metricValue)
 	if err != nil {
 		h.handleError(w, err)
 		return
@@ -137,6 +162,9 @@ func (h *Handler) ValueByJSONHandle(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateByJSONHandle(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	var m models.Metrics
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&m); err != nil {
@@ -144,7 +172,7 @@ func (h *Handler) UpdateByJSONHandle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updatedMetric, err := h.service.UpdateMetricByJSON(m)
+	updatedMetric, err := h.service.UpdateMetricByJSON(ctx, m)
 	if err != nil {
 		h.handleError(w, err)
 		return
@@ -153,19 +181,54 @@ func (h *Handler) UpdateByJSONHandle(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	enc := json.NewEncoder(w)
 	if err := enc.Encode(updatedMetric); err != nil {
-		http.Error(w, "invalid JSON body", http.StatusInternalServerError)
+		http.Error(w, "failed to encode response", http.StatusInternalServerError)
+		return
+	}
+}
+
+func (h *Handler) UpdatesHandle(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var metrics []models.Metrics
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(&metrics); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	if len(metrics) == 0 {
+		http.Error(w, "empty metrics array", http.StatusBadRequest)
+		return
+	}
+
+	count, err := h.service.UpdateMetrics(ctx, metrics)
+	if err != nil {
+		h.handleError(w, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	enc := json.NewEncoder(w)
+	if err := enc.Encode(map[string]int{
+		"updated": *count,
+		"total":   len(metrics),
+	}); err != nil {
+		http.Error(w, "failed to encode response", http.StatusInternalServerError)
 		return
 	}
 }
 
 func (h *Handler) handleError(w http.ResponseWriter, err error) {
+	var errMetricNotFound *errs.MetricNotFoundError
+
 	switch {
 	case errors.Is(err, errs.ErrInvalidResponse):
 		h.logger.Error(err.Error())
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 
-	case errors.Is(err, errs.ErrMetricNotFound):
-		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+	case errors.As(err, &errMetricNotFound):
+		http.Error(w, errMetricNotFound.Error(), http.StatusNotFound)
 
 	case errors.Is(err, errs.ErrUnknownMetricType),
 		errors.Is(err, errs.ErrMetricTypeMismatch),

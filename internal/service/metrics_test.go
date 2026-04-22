@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	models "metrics-collector/internal/model"
 	"metrics-collector/internal/service/mocks"
 	"testing"
@@ -11,6 +12,7 @@ import (
 )
 
 func TestService_UpdateMetricByJSON(t *testing.T) {
+	ctx := context.Background()
 
 	t.Run("positive: create new counter metric", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
@@ -31,10 +33,10 @@ func TestService_UpdateMetricByJSON(t *testing.T) {
 			Return(nil, false)
 
 		mockRepo.EXPECT().
-			UpdateMetric(input).
+			SaveMetric(gomock.Any(), input).
 			Return(&input, nil)
 
-		result, err := svc.UpdateMetricByJSON(input)
+		result, err := svc.UpdateMetricByJSON(ctx, input)
 
 		require.NoError(t, err)
 		require.NotNil(t, result)
@@ -77,10 +79,10 @@ func TestService_UpdateMetricByJSON(t *testing.T) {
 			Return(&existing, true)
 
 		mockRepo.EXPECT().
-			UpdateMetric(processed).
+			SaveMetric(gomock.Any(), processed).
 			Return(&processed, nil)
 
-		result, err := svc.UpdateMetricByJSON(input)
+		result, err := svc.UpdateMetricByJSON(ctx, input)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		assert.Equal(t, *result.Delta, *input.Delta+*existing.Delta)
@@ -104,10 +106,10 @@ func TestService_UpdateMetricByJSON(t *testing.T) {
 		}
 
 		mockRepo.EXPECT().
-			UpdateMetric(input).
+			SaveMetric(gomock.Any(), input).
 			Return(&input, nil)
 
-		result, err := svc.UpdateMetricByJSON(input)
+		result, err := svc.UpdateMetricByJSON(ctx, input)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		assert.Equal(t, input.MType, result.MType)

@@ -36,7 +36,7 @@ func TestHandler_UpdateHandleJSON(t *testing.T) {
 			}`),
 			setupMock: func(m *mocks.MockMetricsService) {
 				m.EXPECT().
-					UpdateMetricByJSON(gomock.Any()).
+					UpdateMetricByJSON(gomock.Any(), gomock.Any()).
 					Return(&models.Metrics{}, nil).
 					Times(1)
 			},
@@ -52,7 +52,7 @@ func TestHandler_UpdateHandleJSON(t *testing.T) {
 			}`),
 			setupMock: func(m *mocks.MockMetricsService) {
 				m.EXPECT().
-					UpdateMetricByJSON(gomock.Any()).
+					UpdateMetricByJSON(gomock.Any(), gomock.Any()).
 					Return(&models.Metrics{}, nil).
 					Times(1)
 			},
@@ -64,7 +64,7 @@ func TestHandler_UpdateHandleJSON(t *testing.T) {
 			body: []byte(""),
 			setupMock: func(m *mocks.MockMetricsService) {
 				m.EXPECT().
-					UpdateMetricByJSON(gomock.Any()).
+					UpdateMetricByJSON(gomock.Any(), gomock.Any()).
 					Times(0)
 			},
 			wantCode:        http.StatusBadRequest,

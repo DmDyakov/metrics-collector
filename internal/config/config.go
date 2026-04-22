@@ -1,10 +1,14 @@
 package config
 
 import (
+	"errors"
 	"flag"
 	"fmt"
+	"log"
+	"os"
 
 	"github.com/caarlos0/env/v11"
+	"github.com/joho/godotenv"
 )
 
 type AgentConfig struct {
@@ -18,55 +22,48 @@ type ServerConfig struct {
 	StoreInterval   int    `env:"STORE_INTERVAL"`
 	FileStoragePath string `env:"FILE_STORAGE_PATH"`
 	Restore         bool   `env:"RESTORE"`
+	DatabaseDSN     string `env:"DATABASE_DSN"`
 }
 
 const (
 	defaultServerBaseURL   = "localhost:8080"
 	defaultPollInterval    = 2
 	defaultReportInterval  = 10
-	defaultStoreInterval   = 300
-	defaultFileStoragePath = "store.json"
+	defaultStoreInterval   = 20
+	defaultFileStoragePath = ""
 	defaultRestore         = false
+	defaultDatabaseDSN     = ""
 )
 
 func NewAgentConfig(args []string) (*AgentConfig, error) {
 	fs := flag.NewFlagSet("agent", flag.ContinueOnError)
 
-	var (
-		serverBaseURLFlag  string
-		pollIntervalFlag   int
-		reportIntervalFlag int
-	)
+	cfg := &AgentConfig{}
 
-	fs.StringVar(&serverBaseURLFlag, "a", defaultServerBaseURL, "address and port to run server")
-	fs.IntVar(&pollIntervalFlag, "p", defaultPollInterval, "poll interval")
-	fs.IntVar(&reportIntervalFlag, "r", defaultReportInterval, "report interval")
+	fs.StringVar(&cfg.ServerBaseURL, "a", defaultServerBaseURL, "address and port to run server")
+	fs.IntVar(&cfg.PollInterval, "p", defaultPollInterval, "poll interval")
+	fs.IntVar(&cfg.ReportInterval, "r", defaultReportInterval, "report interval")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}
 
-	cfg := &AgentConfig{
-		ServerBaseURL:  serverBaseURLFlag,
-		PollInterval:   pollIntervalFlag,
-		ReportInterval: reportIntervalFlag,
-	}
-
+	loadDotEnv()
 	err := env.Parse(cfg)
 	if err != nil {
 		return nil, err
 	}
 
 	if cfg.ServerBaseURL == "" {
-		return nil, fmt.Errorf("server URL can not be empty")
+		return nil, errors.New("server URL can not be empty")
 	}
 
 	if cfg.PollInterval <= 0 {
-		return nil, fmt.Errorf("poll interval must be positive")
+		return nil, errors.New("poll interval must be positive")
 	}
 
 	if cfg.ReportInterval <= 0 {
-		return nil, fmt.Errorf("report interval must be positive")
+		return nil, errors.New("report interval must be positive")
 	}
 
 	if cfg.ReportInterval < cfg.PollInterval {
@@ -79,27 +76,17 @@ func NewAgentConfig(args []string) (*AgentConfig, error) {
 func NewServerConfig(args []string) (*ServerConfig, error) {
 	fs := flag.NewFlagSet("server", flag.ContinueOnError)
 
-	var (
-		serverBaseURLFlag   string
-		storeIntervalFlag   int
-		fileStoragePathFlag string
-		restoreFlag         bool
-	)
+	cfg := &ServerConfig{}
 
-	fs.StringVar(&serverBaseURLFlag, "a", defaultServerBaseURL, "address and port to run server")
-	fs.IntVar(&storeIntervalFlag, "i", defaultStoreInterval, "store interval")
-	fs.StringVar(&fileStoragePathFlag, "f", defaultFileStoragePath, "file storage path")
-	fs.BoolVar(&restoreFlag, "r", defaultRestore, "restore")
+	fs.StringVar(&cfg.ServerBaseURL, "a", defaultServerBaseURL, "address and port to run server")
+	fs.IntVar(&cfg.StoreInterval, "i", defaultStoreInterval, "store interval")
+	fs.StringVar(&cfg.FileStoragePath, "f", defaultFileStoragePath, "file storage path")
+	fs.BoolVar(&cfg.Restore, "r", defaultRestore, "restore")
+	fs.StringVar(&cfg.DatabaseDSN, "d", defaultDatabaseDSN, "database DSN")
 
+	loadDotEnv()
 	if err := fs.Parse(args); err != nil {
 		return nil, err
-	}
-
-	cfg := &ServerConfig{
-		ServerBaseURL:   serverBaseURLFlag,
-		StoreInterval:   storeIntervalFlag,
-		FileStoragePath: fileStoragePathFlag,
-		Restore:         restoreFlag,
 	}
 
 	err := env.Parse(cfg)
@@ -108,16 +95,18 @@ func NewServerConfig(args []string) (*ServerConfig, error) {
 	}
 
 	if cfg.ServerBaseURL == "" {
-		return nil, fmt.Errorf("server URL can not be empty")
+		return nil, errors.New("server URL can not be empty")
 	}
 
 	if cfg.StoreInterval < 0 {
-		return nil, fmt.Errorf("store interval must be non-negative")
-	}
-
-	if cfg.FileStoragePath == "" {
-		return nil, fmt.Errorf("file storage path can not be empty")
+		return nil, errors.New("store interval must be non-negative")
 	}
 
 	return cfg, nil
+}
+
+func loadDotEnv() {
+	if err := godotenv.Load(); err != nil && !errors.Is(err, os.ErrNotExist) {
+		log.Printf("Warning: could not load .env file: %v", err)
+	}
 }

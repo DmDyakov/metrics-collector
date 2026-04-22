@@ -1,6 +1,9 @@
 package errs
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 var (
 	ErrInvalidResponse = errors.New("invalid response data")
@@ -13,7 +16,15 @@ var (
 	ErrMetricDeltaForCountRequired = errors.New("metric delta is required for counter")
 	ErrMetricTypeMismatch          = errors.New("metric type mismatch")
 	ErrUnknownMetricType           = errors.New("unknown metric type")
-	ErrMetricNotFound              = errors.New("metric not found")
 	ErrInvalidCounterValue         = errors.New("invalid counter value, should be int")
 	ErrInvalidGaugeValue           = errors.New("invalid gauge value, should be float")
 )
+
+type MetricNotFoundError struct {
+	Type string
+	Name string
+}
+
+func (e *MetricNotFoundError) Error() string {
+	return fmt.Sprintf("metric %s/%s not found", e.Type, e.Name)
+}

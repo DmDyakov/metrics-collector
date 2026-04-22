@@ -9,7 +9,7 @@ import (
 )
 
 func TestAgent_Poll(t *testing.T) {
-	metrics := make(Metrics)
+	metrics := make(RawMetrics)
 	logger := zap.NewNop()
 	gzip := compress.NewGzip()
 	cfg := &config.AgentConfig{

@@ -2,11 +2,15 @@ package agent
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand/v2"
+	"net"
 	"net/http"
 	"runtime"
+	"syscall"
 	"time"
 
 	"metrics-collector/internal/compress"
@@ -16,7 +20,7 @@ import (
 	"go.uber.org/zap"
 )
 
-type Metrics map[string]any
+type RawMetrics map[string]float64
 
 type Agent struct {
 	cfg    *config.AgentConfig
@@ -37,7 +41,7 @@ func NewAgent(cfg *config.AgentConfig, logger *zap.Logger, gzip *compress.Gzip) 
 }
 
 func (a *Agent) Run() {
-	var metrics = make(Metrics)
+	var metrics = make(RawMetrics)
 	reportMultiplier := int64(a.cfg.ReportInterval / a.cfg.PollInterval)
 	var pollCount int64 = 0
 
@@ -56,7 +60,7 @@ func (a *Agent) Run() {
 
 }
 
-func (a *Agent) Poll(metrics Metrics, count int64) {
+func (a *Agent) Poll(metrics RawMetrics, count int64) {
 	a.logger.Info("Опрос метрик",
 		zap.Int64("iteration", count),
 	)
@@ -65,7 +69,7 @@ func (a *Agent) Poll(metrics Metrics, count int64) {
 
 	runtime.ReadMemStats(&memStats)
 
-	metrics["PollCount"] = count
+	metrics["PollCount"] = float64(count)
 	metrics["RandomValue"] = rand.Float64()
 
 	metrics["Alloc"] = float64(memStats.Alloc)
@@ -97,71 +101,164 @@ func (a *Agent) Poll(metrics Metrics, count int64) {
 	metrics["TotalAlloc"] = float64(memStats.TotalAlloc)
 }
 
-func (a *Agent) Send(metrics Metrics) {
+type MetricRequest struct {
+	ID    string   `json:"id"`
+	Type  string   `json:"type"`
+	Delta *int64   `json:"delta,omitempty"` // для Counter
+	Value *float64 `json:"value,omitempty"` // для Gauge
+}
+
+func (a *Agent) Send(metrics RawMetrics) {
 	a.logger.Info("--- Отправка метрик ---")
-	for name, value := range metrics {
-		var payload Metrics
-		payload = Metrics{
-			"id":    name,
-			"type":  models.Gauge,
-			"value": value,
-		}
+	start := time.Now()
+	batch := prepareBatch(metrics)
+	if len(batch) <= 0 {
+		return
+	}
 
-		if name == "PollCount" {
-			payload = Metrics{
-				"id":    name,
-				"type":  models.Counter,
-				"delta": value,
-			}
-		}
+	url := fmt.Sprintf("http://%s/updates", a.cfg.ServerBaseURL)
+	method := "POST"
+	body, err := a.compressBatch(batch)
+	if err != nil {
+		a.logger.Error("error compress batch", zap.Error(err))
+		return
+	}
 
-		start := time.Now()
+	doRequest := func() (*http.Response, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
 
-		url := fmt.Sprintf("http://%s/update", a.cfg.ServerBaseURL)
-
-		jsonPayload, err := json.Marshal(payload)
-		if err != nil {
-			a.logger.Error("Error JSON marshaling", zap.Error(err))
-			continue
-		}
-
-		compressedJson, err := a.gzip.Compress(jsonPayload)
-		if err != nil {
-			a.logger.Error("Error JSON compressing", zap.Error(err))
-			continue
-		}
-
-		method := "POST"
-		req, err := http.NewRequest(method, url, bytes.NewReader(compressedJson))
+		req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(body))
 		if err != nil {
 			a.logger.Error("failed to build request",
 				zap.String("uri", url),
 				zap.String("method", method),
 				zap.Error(err),
 			)
-			continue
+			return nil, err
 		}
-
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Content-Encoding", "gzip")
 		req.Header.Set("Accept-Encoding", "gzip")
 
-		resp, err := a.client.Do(req)
-		if err != nil {
-			a.logger.Error("failed to send request",
+		return a.client.Do(req)
+	}
+
+	doRequestWithRetry := func() error {
+		delays := []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second}
+		const maxAttempts = 4
+
+		for attempt := 1; attempt <= maxAttempts; attempt++ {
+			resp, err := doRequest()
+			if resp != nil {
+				resp.Body.Close()
+			}
+
+			if err == nil && resp.StatusCode == http.StatusOK {
+				return nil
+			}
+
+			var respError error
+			if resp == nil {
+				respError = errors.New("error server connection")
+			} else {
+				respError = fmt.Errorf("unexpected server status: %s", resp.Status)
+			}
+
+			if !isRetriable(resp, err) || attempt == maxAttempts {
+				return respError
+			}
+
+			delay := delays[attempt-1]
+			a.logger.Info("retrying after delay",
+				zap.Int("attempt", attempt),
+				zap.Duration("delay", delay),
 				zap.String("uri", url),
 				zap.String("method", method),
-				zap.Error(err),
+				zap.Error(respError),
 			)
-			continue
-		}
-		resp.Body.Close()
 
+			time.Sleep(delay)
+		}
+		return nil
+	}
+
+	if err := doRequestWithRetry(); err != nil {
+		a.logger.Error("failed to send request",
+			zap.String("uri", url),
+			zap.String("method", method),
+			zap.Error(err),
+		)
+	} else {
 		duration := time.Since(start)
 		a.logger.Info("request sent",
 			zap.String("uri", url),
 			zap.String("method", "POST"),
 			zap.Duration("duration", duration),
 		)
+	}
+}
+
+// ----- utils ----------------------
+
+func prepareBatch(m RawMetrics) []MetricRequest {
+	batch := make([]MetricRequest, 0, len(m))
+	for k, v := range m {
+		if k == "PollCount" {
+			delta := int64(v)
+			batch = append(batch, MetricRequest{
+				ID:    k,
+				Type:  models.Counter,
+				Delta: &delta,
+			})
+		} else {
+			value := v
+			batch = append(batch, MetricRequest{
+				ID:    k,
+				Type:  models.Gauge,
+				Value: &value,
+			})
+		}
+	}
+	return batch
+}
+
+func (a *Agent) compressBatch(batch []MetricRequest) ([]byte, error) {
+	jsonPayload, err := json.Marshal(batch)
+	if err != nil {
+		a.logger.Error("error JSON marshaling", zap.Error(err))
+		return nil, err
+	}
+	compressedJson, err := a.gzip.Compress(jsonPayload)
+	if err != nil {
+		a.logger.Error("error JSON compressing", zap.Error(err))
+		return nil, err
+	}
+
+	return compressedJson, nil
+}
+
+func isRetriable(resp *http.Response, err error) bool {
+	if err != nil {
+		var netErr net.Error
+		if errors.As(err, &netErr) && netErr.Timeout() {
+			return true
+		}
+
+		if errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ECONNRESET) {
+			return true
+		}
+		return false
+	}
+
+	switch resp.StatusCode {
+	case http.StatusRequestTimeout,
+		http.StatusBadGateway,
+		http.StatusServiceUnavailable,
+		http.StatusGatewayTimeout,
+		http.StatusTooManyRequests:
+		return true
+	default:
+		return false
 	}
 }

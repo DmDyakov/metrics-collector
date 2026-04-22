@@ -54,3 +54,6 @@ go run cmd/agent/main.go
 go install github.com/gotesttools/gotestfmt/v2/cmd/gotestfmt@latest
 ### Команда для вывода
 go test -v -json ./... 2>&1 | gotestfmt
+
+### Обновить сгенерированные моки
+go generate ./...

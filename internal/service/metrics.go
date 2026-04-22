@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"metrics-collector/internal/errs"
 	models "metrics-collector/internal/model"
@@ -11,7 +12,9 @@ import (
 type Repository interface {
 	GetAllMetrics() map[string]models.Metrics
 	GetMetric(metricName string) (*models.Metrics, bool)
-	UpdateMetric(metric models.Metrics) (*models.Metrics, error)
+	SaveMetric(ctx context.Context, metric models.Metrics) (*models.Metrics, error)
+	SaveMetricsBatch(ctx context.Context, metrics []models.Metrics) (*int, error)
+	Ping(ctx context.Context) error
 }
 
 type MetricsService struct {
@@ -22,7 +25,11 @@ func NewMetricsService(repo Repository) *MetricsService {
 	return &MetricsService{repo: repo}
 }
 
-func (svc *MetricsService) UpdateMetricByArgs(metricType, metricName, metricValue string) (*models.Metrics, error) {
+func (svc *MetricsService) Ping(ctx context.Context) error {
+	return svc.repo.Ping(ctx)
+}
+
+func (svc *MetricsService) UpdateMetricByArgs(ctx context.Context, metricType, metricName, metricValue string) (*models.Metrics, error) {
 	input := models.Metrics{
 		ID:    metricName,
 		MType: metricType,
@@ -52,7 +59,7 @@ func (svc *MetricsService) UpdateMetricByArgs(metricType, metricName, metricValu
 			}
 		}
 
-		updated, err := svc.repo.UpdateMetric(models.Metrics{
+		updated, err := svc.repo.SaveMetric(ctx, models.Metrics{
 			ID:    input.ID,
 			MType: models.Counter,
 			Delta: &delta,
@@ -72,7 +79,7 @@ func (svc *MetricsService) UpdateMetricByArgs(metricType, metricName, metricValu
 
 		input.Value = &value
 
-		updated, err := svc.repo.UpdateMetric(input)
+		updated, err := svc.repo.SaveMetric(ctx, input)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %w", errs.ErrInvalidResponse, err)
 		}
@@ -109,7 +116,7 @@ func (svc *MetricsService) GetMetricValue(metricType, metricName string) (*strin
 
 	m, ok := svc.repo.GetMetric(input.ID)
 	if !ok {
-		return nil, fmt.Errorf("%w: %s", errs.ErrMetricNotFound, input.ID)
+		return nil, &errs.MetricNotFoundError{Type: input.MType, Name: input.ID}
 	}
 
 	if m.MType != input.MType {
@@ -140,7 +147,7 @@ func formatToString(m *models.Metrics) (string, error) {
 }
 
 // New API (JSON-based)
-func (svc *MetricsService) UpdateMetricByJSON(input models.Metrics) (*models.Metrics, error) {
+func (svc *MetricsService) UpdateMetricByJSON(ctx context.Context, input models.Metrics) (*models.Metrics, error) {
 	err := svc.validateMetricFull(&input)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errs.ErrInvalidRequest, err)
@@ -179,12 +186,48 @@ func (svc *MetricsService) UpdateMetricByJSON(input models.Metrics) (*models.Met
 		return nil, fmt.Errorf("%w: %w", errs.ErrInvalidResponse, errs.ErrUnknownMetricType)
 	}
 
-	updatedMetric, err := svc.repo.UpdateMetric(m)
+	updatedMetric, err := svc.repo.SaveMetric(ctx, m)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errs.ErrInvalidResponse, err)
 	}
 
 	return updatedMetric, nil
+}
+
+func (svc *MetricsService) UpdateMetrics(ctx context.Context, batch []models.Metrics) (*int, error) {
+	for _, input := range batch {
+		if err := svc.validateMetricFull(&input); err != nil {
+			return nil, fmt.Errorf("%w: %w", errs.ErrInvalidRequest, err)
+		}
+	}
+
+	deduped := svc.deduplicateBatch(batch)
+
+	for idx, input := range deduped {
+		if input.MType == models.Counter {
+			existing, ok := svc.repo.GetMetric(input.ID)
+			if !ok {
+				continue
+			}
+
+			if existing.MType != models.Counter {
+				return nil, fmt.Errorf("%w: expected %s for id: %s, received %s",
+					errs.ErrMetricTypeMismatch,
+					existing.MType, input.ID,
+					input.MType)
+			}
+
+			sum := *input.Delta + *existing.Delta
+			deduped[idx].Delta = &sum
+		}
+	}
+
+	count, err := svc.repo.SaveMetricsBatch(ctx, deduped)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errs.ErrInvalidResponse, err)
+	}
+
+	return count, nil
 }
 
 func (svc *MetricsService) GetMetric(input models.Metrics) (*models.Metrics, error) {
@@ -194,7 +237,7 @@ func (svc *MetricsService) GetMetric(input models.Metrics) (*models.Metrics, err
 
 	m, ok := svc.repo.GetMetric(input.ID)
 	if !ok {
-		return nil, fmt.Errorf("%w: %s", errs.ErrMetricNotFound, input.ID)
+		return nil, &errs.MetricNotFoundError{Type: input.MType, Name: input.ID}
 	}
 
 	if m.MType != input.MType {
@@ -207,4 +250,30 @@ func (svc *MetricsService) GetMetric(input models.Metrics) (*models.Metrics, err
 	}
 
 	return m, nil
+}
+
+func (svc *MetricsService) deduplicateBatch(batch []models.Metrics) []models.Metrics {
+	aggregated := make(map[string]*models.Metrics)
+
+	for _, m := range batch {
+		key := m.ID + ":" + m.MType
+
+		if existing, ok := aggregated[key]; ok {
+			if m.MType == models.Counter {
+				sum := *existing.Delta + *m.Delta
+				existing.Delta = &sum
+			} else {
+				existing.Value = m.Value
+			}
+		} else {
+			copied := m
+			aggregated[key] = &copied
+		}
+	}
+
+	result := make([]models.Metrics, 0, len(aggregated))
+	for _, m := range aggregated {
+		result = append(result, *m)
+	}
+	return result
 }
