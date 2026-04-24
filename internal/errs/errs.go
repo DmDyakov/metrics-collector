@@ -28,3 +28,11 @@ type MetricNotFoundError struct {
 func (e *MetricNotFoundError) Error() string {
 	return fmt.Sprintf("metric %s/%s not found", e.Type, e.Name)
 }
+
+type SignatureError struct {
+	Msg string
+}
+
+func (e *SignatureError) Error() string {
+	return e.Msg
+}

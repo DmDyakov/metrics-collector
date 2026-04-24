@@ -9,7 +9,6 @@ import (
 )
 
 func TestAgent_Poll(t *testing.T) {
-	metrics := make(RawMetrics)
 	logger := zap.NewNop()
 	gzip := compress.NewGzip()
 	cfg := &config.AgentConfig{
@@ -18,7 +17,7 @@ func TestAgent_Poll(t *testing.T) {
 		ServerBaseURL:  "localhost:8080",
 	}
 	a := NewAgent(cfg, logger, gzip)
-	a.Poll(metrics, 1)
+	a.poll(1)
 
 	expectedMetrics := []string{
 		"PollCount",
@@ -53,7 +52,7 @@ func TestAgent_Poll(t *testing.T) {
 	}
 
 	for _, name := range expectedMetrics {
-		if _, ok := metrics[name]; !ok {
+		if _, ok := a.metrics[name]; !ok {
 			t.Errorf("metric %q not found after Poll()", name)
 		}
 	}
