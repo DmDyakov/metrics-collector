@@ -14,18 +14,23 @@ import (
 
 type signResponseWriter struct {
 	http.ResponseWriter
-	buffer     *bytes.Buffer
-	statusCode int
+	buffer      *bytes.Buffer
+	statusCode  int
+	wroteHeader bool
 }
 
 func (w *signResponseWriter) Write(data []byte) (int, error) {
+	if !w.wroteHeader {
+		w.WriteHeader(http.StatusOK)
+	}
 	return w.buffer.Write(data)
 }
 
 func (w *signResponseWriter) WriteHeader(statusCode int) {
-	if w.statusCode != 0 {
+	if w.wroteHeader {
 		return
 	}
+	w.wroteHeader = true
 	w.statusCode = statusCode
 }
 
@@ -50,6 +55,11 @@ func (h *Handler) WithSignature(next http.Handler) http.Handler {
 		}
 
 		next.ServeHTTP(srw, r)
+
+		h.logger.Info("DEBUG: после Handler",
+			zap.String("Content-Type из srw.Header()", srw.Header().Get("Content-Type")),
+			zap.String("Content-Type из w.Header()", w.Header().Get("Content-Type")),
+		)
 
 		for k, v := range srw.Header() {
 			w.Header()[k] = v
