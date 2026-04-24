@@ -51,6 +51,10 @@ func (h *Handler) WithSignature(next http.Handler) http.Handler {
 
 		next.ServeHTTP(srw, r)
 
+		for k, v := range srw.Header() {
+			w.Header()[k] = v
+		}
+
 		if srw.buffer.Len() > 0 {
 			signature := h.createSignature(srw.buffer.Bytes())
 			w.Header().Set("HashSHA256", hex.EncodeToString(signature))
@@ -58,11 +62,7 @@ func (h *Handler) WithSignature(next http.Handler) http.Handler {
 
 		w.WriteHeader(srw.statusCode)
 
-		if r.Method == http.MethodHead {
-			return
-		}
-
-		if srw.buffer.Len() > 0 {
+		if r.Method != http.MethodHead && srw.buffer.Len() > 0 {
 			w.Write(srw.buffer.Bytes())
 		}
 	})
