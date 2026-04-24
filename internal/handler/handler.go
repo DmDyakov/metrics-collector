@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"metrics-collector/internal/compress"
+	"metrics-collector/internal/config"
 	"metrics-collector/internal/errs"
 	models "metrics-collector/internal/model"
 	"metrics-collector/internal/templates"
@@ -35,9 +36,15 @@ type Handler struct {
 	logger                 *zap.Logger
 	gzip                   *compress.Gzip
 	allMetricsHTMLTemplate *template.Template
+	secretKey              string
 }
 
-func NewHandler(service MetricsService, logger *zap.Logger, gzip *compress.Gzip) (*Handler, error) {
+func NewHandler(
+	service MetricsService,
+	logger *zap.Logger,
+	gzip *compress.Gzip,
+	cfg *config.ServerConfig,
+) (*Handler, error) {
 	tmpl, err := template.ParseFS(templates.FS, "metrics.html")
 	if err != nil {
 		return nil, err
@@ -48,6 +55,7 @@ func NewHandler(service MetricsService, logger *zap.Logger, gzip *compress.Gzip)
 		logger:                 logger,
 		gzip:                   gzip,
 		allMetricsHTMLTemplate: tmpl,
+		secretKey:              cfg.SecretKey,
 	}, nil
 }
 
@@ -55,6 +63,7 @@ func (h *Handler) NewMetricsRouter() chi.Router {
 	r := chi.NewRouter()
 	r.Use(middleware.StripSlashes)
 	r.Use(h.WithLogging)
+	r.Use(h.WithSignature)
 	r.Use(h.WithCompressing)
 
 	r.Get("/", h.RootHandle)

@@ -15,6 +15,7 @@ type AgentConfig struct {
 	PollInterval   int    `env:"POLL_INTERVAL"`
 	ReportInterval int    `env:"REPORT_INTERVAL"`
 	ServerBaseURL  string `env:"ADDRESS"`
+	SecretKey      string `env:"KEY"`
 }
 
 type ServerConfig struct {
@@ -23,6 +24,7 @@ type ServerConfig struct {
 	FileStoragePath string `env:"FILE_STORAGE_PATH"`
 	Restore         bool   `env:"RESTORE"`
 	DatabaseDSN     string `env:"DATABASE_DSN"`
+	SecretKey       string `env:"KEY"`
 }
 
 const (
@@ -33,6 +35,7 @@ const (
 	defaultFileStoragePath = ""
 	defaultRestore         = false
 	defaultDatabaseDSN     = ""
+	defaultSecretKey       = ""
 )
 
 func NewAgentConfig(args []string) (*AgentConfig, error) {
@@ -43,6 +46,7 @@ func NewAgentConfig(args []string) (*AgentConfig, error) {
 	fs.StringVar(&cfg.ServerBaseURL, "a", defaultServerBaseURL, "address and port to run server")
 	fs.IntVar(&cfg.PollInterval, "p", defaultPollInterval, "poll interval")
 	fs.IntVar(&cfg.ReportInterval, "r", defaultReportInterval, "report interval")
+	fs.StringVar(&cfg.SecretKey, "k", defaultSecretKey, "secret key")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, err
@@ -83,6 +87,7 @@ func NewServerConfig(args []string) (*ServerConfig, error) {
 	fs.StringVar(&cfg.FileStoragePath, "f", defaultFileStoragePath, "file storage path")
 	fs.BoolVar(&cfg.Restore, "r", defaultRestore, "restore")
 	fs.StringVar(&cfg.DatabaseDSN, "d", defaultDatabaseDSN, "database DSN")
+	fs.StringVar(&cfg.SecretKey, "k", defaultSecretKey, "secret key")
 
 	loadDotEnv()
 	if err := fs.Parse(args); err != nil {

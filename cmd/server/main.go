@@ -34,7 +34,7 @@ func main() {
 
 	svc := service.NewMetricsService(repo)
 	gzip := compress.NewGzip()
-	h, err := handler.NewHandler(svc, logger, gzip)
+	h, err := handler.NewHandler(svc, logger, gzip, cfg)
 	if err != nil {
 		logger.Fatal("Failed to create handler", zap.Error(err))
 	}
