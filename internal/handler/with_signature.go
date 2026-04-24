@@ -56,15 +56,6 @@ func (h *Handler) WithSignature(next http.Handler) http.Handler {
 
 		next.ServeHTTP(srw, r)
 
-		h.logger.Info("DEBUG: после Handler",
-			zap.String("Content-Type из srw.Header()", srw.Header().Get("Content-Type")),
-			zap.String("Content-Type из w.Header()", w.Header().Get("Content-Type")),
-		)
-
-		for k, v := range srw.Header() {
-			w.Header()[k] = v
-		}
-
 		if srw.buffer.Len() > 0 {
 			signature := h.createSignature(srw.buffer.Bytes())
 			w.Header().Set("HashSHA256", hex.EncodeToString(signature))

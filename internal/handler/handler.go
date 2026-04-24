@@ -152,24 +152,12 @@ func (h *Handler) ValueByJSONHandle(w http.ResponseWriter, r *http.Request) {
 	var m models.Metrics
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&m); err != nil {
-		h.logger.Error("ValueByJSONHandle Decode failed",
-			zap.Error(err),
-			zap.String("metric_name", m.ID),
-			zap.String("metric_type", m.MType),
-			zap.String("method", r.Method),
-			zap.String("url", r.URL.String()))
 		http.Error(w, "invalid JSON body", http.StatusBadRequest)
 		return
 	}
 
 	metric, err := h.service.GetMetric(m)
 	if err != nil {
-		h.logger.Error("ValueByJSONHandle GetMetric failed",
-			zap.Error(err),
-			zap.String("metric_name", m.ID),
-			zap.String("metric_type", m.MType),
-			zap.String("method", r.Method),
-			zap.String("url", r.URL.String()))
 		h.handleError(w, err)
 		return
 	}
@@ -177,12 +165,6 @@ func (h *Handler) ValueByJSONHandle(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	enc := json.NewEncoder(w)
 	if err := enc.Encode(metric); err != nil {
-		h.logger.Error("ValueByJSONHandle Encode failed",
-			zap.Error(err),
-			zap.String("metric_name", m.ID),
-			zap.String("metric_type", m.MType),
-			zap.String("method", r.Method),
-			zap.String("url", r.URL.String()))
 		http.Error(w, "invalid JSON body", http.StatusInternalServerError)
 		return
 	}
@@ -195,24 +177,12 @@ func (h *Handler) UpdateByJSONHandle(w http.ResponseWriter, r *http.Request) {
 	var m models.Metrics
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&m); err != nil {
-		h.logger.Error("UpdateByJSONHandle Decode failed",
-			zap.Error(err),
-			zap.String("metric_name", m.ID),
-			zap.String("metric_type", m.MType),
-			zap.String("method", r.Method),
-			zap.String("url", r.URL.String()))
 		http.Error(w, "invalid JSON body", http.StatusBadRequest)
 		return
 	}
 
 	updatedMetric, err := h.service.UpdateMetricByJSON(ctx, m)
 	if err != nil {
-		h.logger.Error("UpdateByJSONHandle UpdateMetricByJSON failed",
-			zap.Error(err),
-			zap.String("metric_name", m.ID),
-			zap.String("metric_type", m.MType),
-			zap.String("method", r.Method),
-			zap.String("url", r.URL.String()))
 		h.handleError(w, err)
 		return
 	}
@@ -220,12 +190,6 @@ func (h *Handler) UpdateByJSONHandle(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	enc := json.NewEncoder(w)
 	if err := enc.Encode(updatedMetric); err != nil {
-		h.logger.Error("UpdateByJSONHandle Encode failed",
-			zap.Error(err),
-			zap.String("metric_name", m.ID),
-			zap.String("metric_type", m.MType),
-			zap.String("method", r.Method),
-			zap.String("url", r.URL.String()))
 		http.Error(w, "failed to encode response", http.StatusInternalServerError)
 		return
 	}
