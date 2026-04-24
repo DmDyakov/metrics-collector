@@ -36,9 +36,11 @@ func (h *Handler) WithSignature(next http.Handler) http.Handler {
 			return
 		}
 
-		if err := h.checkRequestSignature(r); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
+		if r.Header.Get("HashSHA256") != "" {
+			if err := h.checkRequestSignature(r); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
 		}
 
 		srw := &signResponseWriter{
