@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"log"
 	"metrics-collector/internal/agent"
 	"metrics-collector/internal/compress"
 	"metrics-collector/internal/config"
 	"metrics-collector/internal/logger"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"go.uber.org/zap"
 )
@@ -17,8 +20,6 @@ func main() {
 		log.Fatalf("Failed to create agent logger: %v", err)
 	}
 	defer logger.Sync()
-
-	logger.Info("Starting agent...")
 
 	cfg, err := config.NewAgentConfig(os.Args[1:])
 	if err != nil {
@@ -32,6 +33,8 @@ func main() {
 	gzip := compress.NewGzip()
 	agent := agent.NewAgent(cfg, logger, gzip)
 
-	agent.Run()
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
 
+	agent.Run(ctx)
 }

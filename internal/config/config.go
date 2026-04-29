@@ -16,6 +16,7 @@ type AgentConfig struct {
 	ReportInterval int    `env:"REPORT_INTERVAL"`
 	ServerBaseURL  string `env:"ADDRESS"`
 	SecretKey      string `env:"KEY"`
+	RateLimit      int    `env:"RATE_LIMIT"`
 }
 
 type ServerConfig struct {
@@ -36,6 +37,7 @@ const (
 	defaultRestore         = false
 	defaultDatabaseDSN     = ""
 	defaultSecretKey       = ""
+	defaultRateLimit       = 2
 )
 
 func NewAgentConfig(args []string) (*AgentConfig, error) {
@@ -47,6 +49,7 @@ func NewAgentConfig(args []string) (*AgentConfig, error) {
 	fs.IntVar(&cfg.PollInterval, "p", defaultPollInterval, "poll interval")
 	fs.IntVar(&cfg.ReportInterval, "r", defaultReportInterval, "report interval")
 	fs.StringVar(&cfg.SecretKey, "k", defaultSecretKey, "secret key")
+	fs.IntVar(&cfg.RateLimit, "l", defaultRateLimit, "rate limit")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, err
@@ -68,6 +71,10 @@ func NewAgentConfig(args []string) (*AgentConfig, error) {
 
 	if cfg.ReportInterval <= 0 {
 		return nil, errors.New("report interval must be positive")
+	}
+
+	if cfg.RateLimit <= 0 {
+		cfg.RateLimit = defaultRateLimit
 	}
 
 	if cfg.ReportInterval < cfg.PollInterval {

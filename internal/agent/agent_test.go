@@ -17,7 +17,7 @@ func TestAgent_Poll(t *testing.T) {
 		ServerBaseURL:  "localhost:8080",
 	}
 	a := NewAgent(cfg, logger, gzip)
-	a.poll(1)
+	a.collectMemStats(1)
 
 	expectedMetrics := []string{
 		"PollCount",
@@ -52,7 +52,7 @@ func TestAgent_Poll(t *testing.T) {
 	}
 
 	for _, name := range expectedMetrics {
-		if _, ok := a.metrics[name]; !ok {
+		if _, ok := a.store.metrics[name]; !ok {
 			t.Errorf("metric %q not found after Poll()", name)
 		}
 	}

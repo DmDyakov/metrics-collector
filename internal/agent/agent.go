@@ -1,13 +1,9 @@
 package agent
 
 import (
-	"bytes"
 	"context"
-	"encoding/hex"
-	"fmt"
-	"math/rand/v2"
 	"net/http"
-	"runtime"
+	"sync"
 	"time"
 
 	"metrics-collector/internal/compress"
@@ -16,14 +12,34 @@ import (
 	"go.uber.org/zap"
 )
 
-type rawMetrics map[string]float64
+type Store struct {
+	metrics storeMetrics
+	mu      sync.RWMutex
+}
+
+type storeMetrics map[string]float64
+
+type batchMetric struct {
+	ID    string   `json:"id"`
+	Type  string   `json:"type"`
+	Delta *int64   `json:"delta,omitempty"` // для Counter
+	Value *float64 `json:"value,omitempty"` // для Gauge
+}
 
 type Agent struct {
-	cfg     *config.AgentConfig
-	logger  *zap.Logger
-	gzip    *compress.Gzip
-	client  *http.Client
-	metrics map[string]float64
+	cfg    *config.AgentConfig
+	logger *zap.Logger
+	gzip   *compress.Gzip
+	client *http.Client
+	store  *Store
+
+	jobs chan []batchMetric
+}
+
+func NewStore() *Store {
+	return &Store{
+		metrics: make(map[string]float64),
+	}
 }
 
 func NewAgent(cfg *config.AgentConfig, logger *zap.Logger, gzip *compress.Gzip) *Agent {
@@ -34,132 +50,128 @@ func NewAgent(cfg *config.AgentConfig, logger *zap.Logger, gzip *compress.Gzip) 
 		client: &http.Client{
 			Timeout: 10 * time.Second,
 		},
-		metrics: make(rawMetrics),
+		store: NewStore(),
+		jobs:  make(chan []batchMetric, cfg.RateLimit*2), // *2 - чтобы сгладить пики и избежать блокировки reportScheduler
 	}
 }
 
-func (a *Agent) Run() {
-	reportMultiplier := int64(a.cfg.ReportInterval / a.cfg.PollInterval)
-	var pollCount int64 = 0
-
-	pollTicker := time.NewTicker(time.Duration(a.cfg.PollInterval) * time.Second)
-	defer pollTicker.Stop()
-
-	for range pollTicker.C {
-		pollCount++
-
-		a.poll(pollCount)
-
-		if pollCount%reportMultiplier == 0 {
-			a.send()
-		}
-	}
-
-}
-
-func (a *Agent) poll(count int64) {
-	a.logger.Info("Опрос метрик",
-		zap.Int64("iteration", count),
+func (a *Agent) Run(ctx context.Context) {
+	a.logger.Info("Starting agent",
+		zap.Int("rate_limit", a.cfg.RateLimit),
+		zap.Int("poll_interval", a.cfg.PollInterval),
+		zap.Int("report_interval", a.cfg.ReportInterval),
 	)
 
-	var memStats runtime.MemStats
+	var wg sync.WaitGroup
 
-	runtime.ReadMemStats(&memStats)
+	for i := 0; i < a.cfg.RateLimit; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			a.reportingWorker(ctx, id)
+		}(i + 1)
+	}
 
-	a.metrics["PollCount"] = float64(count)
-	a.metrics["RandomValue"] = rand.Float64()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		a.collectRuntimeMetrics(ctx)
+	}()
 
-	a.metrics["Alloc"] = float64(memStats.Alloc)
-	a.metrics["BuckHashSys"] = float64(memStats.BuckHashSys)
-	a.metrics["Frees"] = float64(memStats.Frees)
-	a.metrics["GCCPUFraction"] = memStats.GCCPUFraction
-	a.metrics["GCSys"] = float64(memStats.GCSys)
-	a.metrics["HeapAlloc"] = float64(memStats.HeapAlloc)
-	a.metrics["HeapIdle"] = float64(memStats.HeapIdle)
-	a.metrics["HeapInuse"] = float64(memStats.HeapInuse)
-	a.metrics["HeapObjects"] = float64(memStats.HeapObjects)
-	a.metrics["HeapReleased"] = float64(memStats.HeapReleased)
-	a.metrics["HeapSys"] = float64(memStats.HeapSys)
-	a.metrics["LastGC"] = float64(memStats.LastGC)
-	a.metrics["Lookups"] = float64(memStats.Lookups)
-	a.metrics["MCacheInuse"] = float64(memStats.MCacheInuse)
-	a.metrics["MCacheSys"] = float64(memStats.MCacheSys)
-	a.metrics["MSpanInuse"] = float64(memStats.MSpanInuse)
-	a.metrics["MSpanSys"] = float64(memStats.MSpanSys)
-	a.metrics["Mallocs"] = float64(memStats.Mallocs)
-	a.metrics["NextGC"] = float64(memStats.NextGC)
-	a.metrics["NumForcedGC"] = float64(memStats.NumForcedGC)
-	a.metrics["NumGC"] = float64(memStats.NumGC)
-	a.metrics["OtherSys"] = float64(memStats.OtherSys)
-	a.metrics["PauseTotalNs"] = float64(memStats.PauseTotalNs)
-	a.metrics["StackInuse"] = float64(memStats.StackInuse)
-	a.metrics["StackSys"] = float64(memStats.StackSys)
-	a.metrics["Sys"] = float64(memStats.Sys)
-	a.metrics["TotalAlloc"] = float64(memStats.TotalAlloc)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		a.collectSystemMetrics(ctx)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		a.reportingScheduler(ctx)
+	}()
+
+	<-ctx.Done()
+
+	close(a.jobs)
+
+	wg.Wait()
+	a.logger.Info("Agent stopped")
 }
 
-func (a *Agent) send() {
-	a.logger.Info("Metrics sending...")
-	start := time.Now()
-	batch := buildBatch(a.metrics)
-	if len(batch) <= 0 {
-		return
+func (a *Agent) reportingWorker(ctx context.Context, id int) {
+	for job := range a.jobs {
+		a.logger.Debug("worker started",
+			zap.Int("id", id),
+		)
+
+		a.reportBatch(job)
+
+		a.logger.Debug("worker finished",
+			zap.Int("id", id),
+		)
 	}
+	a.logger.Debug("reporting worker stopped", zap.Int("id", id))
+}
 
-	url := fmt.Sprintf("http://%s/updates", a.cfg.ServerBaseURL)
-	method := "POST"
-	reqBody, err := a.compress(batch)
-	if err != nil {
-		a.logger.Error("error compress batch", zap.Error(err))
-		return
-	}
+func (a *Agent) reportingScheduler(ctx context.Context) {
+	ticker := time.NewTicker(time.Duration(a.cfg.ReportInterval) * time.Second)
+	defer ticker.Stop()
 
-	doRequest := func() (*http.Response, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
+	for {
+		select {
+		case <-ctx.Done():
+			a.logger.Debug("reporting scheduler stopped, context done")
+			return
+		case <-ticker.C:
+			a.logger.Info("schedule reporting")
+			batch := a.buildReportingBatch()
 
-		req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(reqBody))
-		if err != nil {
-			a.logger.Error("failed to build request",
-				zap.String("uri", url),
-				zap.String("method", method),
-				zap.Error(err),
-			)
-			return nil, err
-		}
-
-		if a.cfg.SecretKey != "" {
-			req.Header.Set("HashSHA256", hex.EncodeToString(a.createSignature(reqBody)))
-		}
-
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Content-Encoding", "gzip")
-		req.Header.Set("Accept-Encoding", "gzip")
-
-		resp, err := a.client.Do(req)
-		if resp != nil {
-			defer resp.Body.Close()
-
-			if a.cfg.SecretKey != "" {
-				err = a.checkResponseSignature(resp)
+			select {
+			case <-ctx.Done():
+				a.logger.Debug("report batch enqueued skipped, reporting scheduler stopped, context cancelled")
+				return
+			case a.jobs <- batch:
+				a.logger.Debug("report batch enqueued")
 			}
 		}
-
-		return resp, err
 	}
 
-	if err := a.withRetry(doRequest); err != nil {
-		a.logger.Error("failed to send request",
-			zap.String("uri", url),
-			zap.String("method", method),
-			zap.Error(err),
-		)
-	} else {
-		duration := time.Since(start)
-		a.logger.Info("request sent",
-			zap.String("uri", url),
-			zap.String("method", "POST"),
-			zap.Duration("duration", duration),
-		)
+}
+
+func (a *Agent) collectRuntimeMetrics(ctx context.Context) {
+	ticker := time.NewTicker(time.Duration(a.cfg.PollInterval) * time.Second)
+	defer ticker.Stop()
+	var count int64
+
+	for {
+		select {
+		case <-ctx.Done():
+			a.logger.Debug("runtime metrics collector stopped, context done")
+			return
+		case <-ticker.C:
+			count++
+			a.logger.Info("Collect runtime metrics",
+				zap.Int64("iteration", count),
+			)
+
+			a.collectMemStats(count)
+		}
+	}
+}
+
+func (a *Agent) collectSystemMetrics(ctx context.Context) {
+	ticker := time.NewTicker(time.Duration(a.cfg.PollInterval) * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			a.logger.Debug("system metrics collector stopped, context done")
+			return
+		case <-ticker.C:
+			a.logger.Info("Collect system metrics")
+			a.collectVirtualMemoryInfo()
+			a.collectCpuPercentsInfo()
+		}
 	}
 }

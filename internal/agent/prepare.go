@@ -7,36 +7,34 @@ import (
 	"go.uber.org/zap"
 )
 
-type metricRequest struct {
-	ID    string   `json:"id"`
-	Type  string   `json:"type"`
-	Delta *int64   `json:"delta,omitempty"` // для Counter
-	Value *float64 `json:"value,omitempty"` // для Gauge
-}
+func (a *Agent) buildReportingBatch() []batchMetric {
+	a.store.mu.RLock()
 
-func buildBatch(m rawMetrics) []metricRequest {
-	batch := make([]metricRequest, 0, len(m))
-	for k, v := range m {
+	batch := make([]batchMetric, 0, len(a.store.metrics))
+	for k, v := range a.store.metrics {
 		if k == "PollCount" {
 			delta := int64(v)
-			batch = append(batch, metricRequest{
+			batch = append(batch, batchMetric{
 				ID:    k,
 				Type:  models.Counter,
 				Delta: &delta,
 			})
 		} else {
 			value := v
-			batch = append(batch, metricRequest{
+			batch = append(batch, batchMetric{
 				ID:    k,
 				Type:  models.Gauge,
 				Value: &value,
 			})
 		}
 	}
+
+	a.store.mu.RUnlock()
+
 	return batch
 }
 
-func (a *Agent) compress(batch []metricRequest) ([]byte, error) {
+func (a *Agent) compress(batch []batchMetric) ([]byte, error) {
 	jsonPayload, err := json.Marshal(batch)
 	if err != nil {
 		a.logger.Error("error JSON marshaling", zap.Error(err))
