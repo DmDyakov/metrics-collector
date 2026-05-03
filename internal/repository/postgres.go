@@ -16,16 +16,34 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"go.uber.org/zap"
 )
 
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
 
+type DB struct {
+	*sql.DB
+	logger *zap.Logger
+}
 type PostgresStorage struct {
-	db *sql.DB
+	db     DB
+	logger *zap.Logger
 }
 
-func newPostgresStorage(databaseDSN string) (*PostgresStorage, error) {
+func (db *DB) ExecContextWithRetry(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	return doWithRetry(ctx, db.logger, func() (sql.Result, error) {
+		return db.ExecContext(ctx, query, args...)
+	})
+}
+
+func (db *DB) QueryContextWithRetry(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	return doWithRetry(ctx, db.logger, func() (*sql.Rows, error) { return db.QueryContext(ctx, query, args...) })
+}
+
+//----------------------------------
+
+func newPostgresStorage(databaseDSN string, logger *zap.Logger) (*PostgresStorage, error) {
 	db, err := sql.Open("pgx", databaseDSN)
 	if err != nil {
 		return nil, err
@@ -43,7 +61,8 @@ func newPostgresStorage(databaseDSN string) (*PostgresStorage, error) {
 	}
 
 	return &PostgresStorage{
-		db: db,
+		db:     DB{db, logger},
+		logger: logger,
 	}, nil
 }
 
@@ -54,34 +73,29 @@ func (p *PostgresStorage) saveMetric(ctx context.Context, m *models.Metrics) err
 			return errs.ErrMetricDeltaForCountRequired
 		}
 
-		saveCountMetric := func() (sql.Result, error) {
-			return p.db.ExecContext(ctx,
-				`INSERT INTO counters (name, value, updated_dt) 
+		_, err := p.db.ExecContextWithRetry(ctx,
+			`INSERT INTO counters (name, value, updated_dt) 
 				VALUES ($1, $2, NOW())
 				ON CONFLICT (name) DO UPDATE SET 
 					value = EXCLUDED.value,
 					updated_dt = NOW()`,
-				m.ID, *m.Delta)
-		}
+			m.ID, *m.Delta)
 
-		_, err := doWithRetry(ctx, saveCountMetric)
 		return err
 
 	case models.Gauge:
 		if m.Value == nil {
-			return nil
+			return errs.ErrMetricValueForGaugeRequired
 		}
 
-		saveGaugeMetric := func() (sql.Result, error) {
-			return p.db.ExecContext(ctx,
-				`INSERT INTO gauges (name, value, updated_dt) 
+		_, err := p.db.ExecContextWithRetry(ctx,
+			`INSERT INTO gauges (name, value, updated_dt) 
 			VALUES ($1, $2, NOW())
 				ON CONFLICT (name) DO UPDATE SET 
 					value = EXCLUDED.value, 
 					updated_dt = NOW()`,
-				m.ID, *m.Value)
-		}
-		_, err := doWithRetry(ctx, saveGaugeMetric)
+			m.ID, *m.Value)
+
 		return err
 	}
 
@@ -89,48 +103,59 @@ func (p *PostgresStorage) saveMetric(ctx context.Context, m *models.Metrics) err
 }
 
 func (p *PostgresStorage) loadAllMetrics(ctx context.Context) ([]models.Metrics, error) {
-	queryAll := func() ([]models.Metrics, error) {
-		var metrics []models.Metrics
-		rows, err := p.db.QueryContext(ctx,
-			`SELECT name, 'counter' as type, value::DOUBLE PRECISION as value FROM counters
+	var metrics []models.Metrics
+	rows, err := p.db.QueryContextWithRetry(ctx,
+		`SELECT name, 'counter' as type, value::DOUBLE PRECISION as value FROM counters
 			UNION ALL
 			SELECT name, 'gauge' as type, value FROM gauges`)
-		if err != nil {
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			p.logger.Error("rows close failed", zap.Error(err))
+		}
+	}()
+
+	for rows.Next() {
+		var m models.Metrics
+		var value float64
+		if err := rows.Scan(&m.ID, &m.MType, &value); err != nil {
 			return nil, err
 		}
-		defer rows.Close()
 
-		for rows.Next() {
-			var m models.Metrics
-			var value float64
-			if err := rows.Scan(&m.ID, &m.MType, &value); err != nil {
-				return nil, err
-			}
-
-			if m.MType == models.Counter {
-				delta := int64(value)
-				m.Delta = &delta
-			} else if m.MType == models.Gauge {
-				m.Value = &value
-			}
-
-			metrics = append(metrics, m)
+		switch {
+		case m.MType == models.Counter:
+			delta := int64(value)
+			m.Delta = &delta
+		case m.MType == models.Gauge:
+			m.Value = &value
 		}
 
-		return metrics, nil
+		metrics = append(metrics, m)
 	}
 
-	return doWithRetry(ctx, queryAll)
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return metrics, nil
 }
 
 func (p *PostgresStorage) saveMetricsBatch(ctx context.Context, metrics []models.Metrics) (*int, error) {
-	saveMetrics := func() (*int, error) {
+	return doWithRetry(ctx, p.logger, func() (*int, error) {
 		savedMetricsCount := 0
-		tx, err := p.db.Begin()
+		tx, err := p.db.BeginTx(ctx, nil)
 		if err != nil {
-			return &savedMetricsCount, err
+			return nil, err
 		}
-		defer tx.Rollback()
+		defer func() {
+			if err != nil {
+				if rbErr := tx.Rollback(); rbErr != nil {
+					p.logger.Error("rollback failed", zap.Error(rbErr))
+				}
+			}
+		}()
 
 		for _, m := range metrics {
 			switch m.MType {
@@ -168,11 +193,15 @@ func (p *PostgresStorage) saveMetricsBatch(ctx context.Context, metrics []models
 			}
 
 		}
-		tx.Commit()
-		return &savedMetricsCount, nil
-	}
 
-	return doWithRetry(ctx, saveMetrics)
+		err = tx.Commit()
+		if err != nil {
+			return nil, err
+		}
+
+		return &savedMetricsCount, err
+	})
+
 }
 
 func runMigrations(db *sql.DB) error {
@@ -215,7 +244,7 @@ func isRetriableDBError(err error) bool {
 	return false
 }
 
-func doWithRetry[T any](ctx context.Context, fn func() (T, error)) (T, error) {
+func doWithRetry[T any](ctx context.Context, logger *zap.Logger, fn func() (T, error)) (T, error) {
 	delays := []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second}
 	const maxAttempts = 4
 
@@ -231,6 +260,12 @@ func doWithRetry[T any](ctx context.Context, fn func() (T, error)) (T, error) {
 		}
 
 		delay := delays[attempt-1]
+		logger.Warn("retrying db operation due to retriable error",
+			zap.Int("attempt", attempt),
+			zap.Duration("delay", delay),
+			zap.Error(err),
+		)
+
 		select {
 		case <-ctx.Done():
 			return zero, ctx.Err()
