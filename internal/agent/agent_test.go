@@ -20,8 +20,8 @@ func TestAgent_Poll(t *testing.T) {
 	a.collectMemStats(1)
 
 	expectedMetrics := []string{
-		"PollCount",
-		"RandomValue",
+		PollCount,
+		RandomValue,
 		"Alloc",
 		"BuckHashSys",
 		"Frees",

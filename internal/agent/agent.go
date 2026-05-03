@@ -12,6 +12,11 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	PollCount   = "PoolCount"
+	RandomValue = "RandomValue"
+)
+
 type Store struct {
 	metrics storeMetrics
 	mu      sync.RWMutex

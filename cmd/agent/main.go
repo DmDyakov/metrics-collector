@@ -33,8 +33,8 @@ func main() {
 	gzip := compress.NewGzip()
 	agent := agent.NewAgent(cfg, logger, gzip)
 
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer cancel()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	agent.Run(ctx)
 }

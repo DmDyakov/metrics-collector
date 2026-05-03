@@ -9,6 +9,9 @@ var (
 	ErrInvalidResponse = errors.New("invalid response data")
 	ErrInvalidRequest  = errors.New("invalid request data")
 
+	ErrRequestBodyRead  = errors.New("failed to read request body")
+	ErrInvalidSignature = errors.New("invalid signature")
+
 	// metrics
 	ErrMetricTypeRequired          = errors.New("metric type is required")
 	ErrMetricNameRequired          = errors.New("metric name is required")

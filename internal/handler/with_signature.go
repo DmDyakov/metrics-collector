@@ -5,8 +5,9 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
+	"fmt"
 	"io"
+	"metrics-collector/internal/errs"
 	"net/http"
 
 	"go.uber.org/zap"
@@ -77,14 +78,14 @@ func (h *Handler) checkRequestSignature(r *http.Request) error {
 			zap.String("method", r.Method),
 			zap.String("url", r.URL.String()),
 			zap.Int("body_size", len(body)))
-		return errors.New("failed to read request body")
+		return errs.ErrRequestBodyRead
 	}
 
 	r.Body = io.NopCloser(bytes.NewBuffer(body)) // восстанавливаем тело
 
 	received, err := hex.DecodeString(r.Header.Get("HashSHA256"))
 	if err != nil {
-		return errors.New("invalid signature format")
+		return fmt.Errorf("%w: invalid hex format", errs.ErrInvalidSignature)
 	}
 
 	expected := h.createSignature(body)
@@ -94,7 +95,7 @@ func (h *Handler) checkRequestSignature(r *http.Request) error {
 			zap.String("expected", hex.EncodeToString(expected)),
 			zap.String("received", hex.EncodeToString(received)),
 		)
-		return errors.New("invalid request signature")
+		return errs.ErrInvalidSignature
 	}
 
 	return nil

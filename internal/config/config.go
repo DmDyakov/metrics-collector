@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/caarlos0/env/v11"
 	"github.com/joho/godotenv"
@@ -20,12 +21,14 @@ type AgentConfig struct {
 }
 
 type ServerConfig struct {
-	ServerBaseURL   string `env:"ADDRESS"`
-	StoreInterval   int    `env:"STORE_INTERVAL"`
-	FileStoragePath string `env:"FILE_STORAGE_PATH"`
-	Restore         bool   `env:"RESTORE"`
-	DatabaseDSN     string `env:"DATABASE_DSN"`
-	SecretKey       string `env:"KEY"`
+	ServerBaseURL   string        `env:"ADDRESS"`
+	StoreInterval   int           `env:"STORE_INTERVAL"`
+	FileStoragePath string        `env:"FILE_STORAGE_PATH"`
+	Restore         bool          `env:"RESTORE"`
+	DatabaseDSN     string        `env:"DATABASE_DSN"`
+	SecretKey       string        `env:"KEY"`
+	RequestTimeout  time.Duration `env:"REQ_TIMEOUT"`
+	ShutdownTimeout time.Duration `env:"SHUTDOWN_TIMEOUT"`
 }
 
 const (
@@ -38,6 +41,8 @@ const (
 	defaultDatabaseDSN     = ""
 	defaultSecretKey       = ""
 	defaultRateLimit       = 2
+	defaultRequestTimeout  = 5 * time.Second
+	defaultShutdownTimeout = 10 * time.Second
 )
 
 func NewAgentConfig(args []string) (*AgentConfig, error) {
@@ -95,6 +100,8 @@ func NewServerConfig(args []string) (*ServerConfig, error) {
 	fs.BoolVar(&cfg.Restore, "r", defaultRestore, "restore")
 	fs.StringVar(&cfg.DatabaseDSN, "d", defaultDatabaseDSN, "database DSN")
 	fs.StringVar(&cfg.SecretKey, "k", defaultSecretKey, "secret key")
+	fs.DurationVar(&cfg.RequestTimeout, "t", cfg.RequestTimeout, "request timeout")
+	fs.DurationVar(&cfg.ShutdownTimeout, "s", cfg.ShutdownTimeout, "shutdown timeout")
 
 	loadDotEnv()
 	if err := fs.Parse(args); err != nil {

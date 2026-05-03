@@ -12,7 +12,7 @@ func (a *Agent) buildReportingBatch() []batchMetric {
 
 	batch := make([]batchMetric, 0, len(a.store.metrics))
 	for k, v := range a.store.metrics {
-		if k == "PollCount" {
+		if k == PollCount {
 			delta := int64(v)
 			batch = append(batch, batchMetric{
 				ID:    k,
@@ -40,11 +40,11 @@ func (a *Agent) compress(batch []batchMetric) ([]byte, error) {
 		a.logger.Error("error JSON marshaling", zap.Error(err))
 		return nil, err
 	}
-	compressedJson, err := a.gzip.Compress(jsonPayload)
+	compressedJSON, err := a.gzip.Compress(jsonPayload)
 	if err != nil {
 		a.logger.Error("error JSON compressing", zap.Error(err))
 		return nil, err
 	}
 
-	return compressedJson, nil
+	return compressedJSON, nil
 }

@@ -17,8 +17,8 @@ func (a *Agent) collectMemStats(count int64) {
 
 	a.store.mu.Lock()
 
-	a.store.metrics["PollCount"] = float64(count)
-	a.store.metrics["RandomValue"] = rand.Float64()
+	a.store.metrics[PollCount] = float64(count)
+	a.store.metrics[RandomValue] = rand.Float64()
 
 	a.store.metrics["Alloc"] = float64(memStats.Alloc)
 	a.store.metrics["BuckHashSys"] = float64(memStats.BuckHashSys)

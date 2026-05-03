@@ -21,7 +21,7 @@ func (a *Agent) reportBatch(batch []batchMetric) {
 	start := time.Now()
 
 	url := fmt.Sprintf("http://%s/updates", a.cfg.ServerBaseURL)
-	method := "POST"
+	method := http.MethodPost
 	reqBody, err := a.compress(batch)
 	if err != nil {
 		a.logger.Error("error compress batch", zap.Error(err))
