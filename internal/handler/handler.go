@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"metrics-collector/internal/compress"
+	"metrics-collector/internal/config"
 	"metrics-collector/internal/errs"
 	models "metrics-collector/internal/model"
 	"metrics-collector/internal/templates"
@@ -35,9 +36,16 @@ type Handler struct {
 	logger                 *zap.Logger
 	gzip                   *compress.Gzip
 	allMetricsHTMLTemplate *template.Template
+	secretKey              string
+	requestTimeout         time.Duration
 }
 
-func NewHandler(service MetricsService, logger *zap.Logger, gzip *compress.Gzip) (*Handler, error) {
+func NewHandler(
+	service MetricsService,
+	logger *zap.Logger,
+	gzip *compress.Gzip,
+	cfg *config.ServerConfig,
+) (*Handler, error) {
 	tmpl, err := template.ParseFS(templates.FS, "metrics.html")
 	if err != nil {
 		return nil, err
@@ -48,13 +56,23 @@ func NewHandler(service MetricsService, logger *zap.Logger, gzip *compress.Gzip)
 		logger:                 logger,
 		gzip:                   gzip,
 		allMetricsHTMLTemplate: tmpl,
+		secretKey:              cfg.SecretKey,
+		requestTimeout:         cfg.RequestTimeout,
 	}, nil
 }
+
+type contextKey string
+
+const (
+	startTimeKey contextKey = "startTime"
+)
 
 func (h *Handler) NewMetricsRouter() chi.Router {
 	r := chi.NewRouter()
 	r.Use(middleware.StripSlashes)
+	r.Use(h.WithTimeout)
 	r.Use(h.WithLogging)
+	r.Use(h.WithSignature)
 	r.Use(h.WithCompressing)
 
 	r.Get("/", h.RootHandle)
@@ -69,10 +87,7 @@ func (h *Handler) NewMetricsRouter() chi.Router {
 }
 
 func (h *Handler) PingHandle(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	err := h.service.Ping(ctx)
+	err := h.service.Ping(r.Context())
 	if err != nil {
 		h.logger.Error("Database ping failed", zap.Error(err))
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -122,10 +137,7 @@ func (h *Handler) UpdateHandle(w http.ResponseWriter, r *http.Request) {
 	metricName := chi.URLParam(r, "name")
 	metricValue := chi.URLParam(r, "value")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	updated, err := h.service.UpdateMetricByArgs(ctx, metricType, metricName, metricValue)
+	updated, err := h.service.UpdateMetricByArgs(r.Context(), metricType, metricName, metricValue)
 	if err != nil {
 		h.handleError(w, err)
 		return
@@ -162,9 +174,6 @@ func (h *Handler) ValueByJSONHandle(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateByJSONHandle(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
 	var m models.Metrics
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&m); err != nil {
@@ -172,7 +181,7 @@ func (h *Handler) UpdateByJSONHandle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updatedMetric, err := h.service.UpdateMetricByJSON(ctx, m)
+	updatedMetric, err := h.service.UpdateMetricByJSON(r.Context(), m)
 	if err != nil {
 		h.handleError(w, err)
 		return
@@ -187,9 +196,6 @@ func (h *Handler) UpdateByJSONHandle(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdatesHandle(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
 	var metrics []models.Metrics
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&metrics); err != nil {
@@ -202,7 +208,7 @@ func (h *Handler) UpdatesHandle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	count, err := h.service.UpdateMetrics(ctx, metrics)
+	count, err := h.service.UpdateMetrics(r.Context(), metrics)
 	if err != nil {
 		h.handleError(w, err)
 		return
