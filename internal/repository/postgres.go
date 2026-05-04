@@ -27,8 +27,7 @@ type DB struct {
 	logger *zap.Logger
 }
 type PostgresStorage struct {
-	db     DB
-	logger *zap.Logger
+	db DB
 }
 
 func (db *DB) ExecContextWithRetry(ctx context.Context, query string, args ...any) (sql.Result, error) {
@@ -44,7 +43,7 @@ func (db *DB) QueryContextWithRetry(ctx context.Context, query string, args ...a
 //----------------------------------
 
 func newPostgresStorage(databaseDSN string, logger *zap.Logger) (*PostgresStorage, error) {
-	db, err := sql.Open("pgx", databaseDSN)
+	sqlDB, err := sql.Open("pgx", databaseDSN)
 	if err != nil {
 		return nil, err
 	}
@@ -52,17 +51,16 @@ func newPostgresStorage(databaseDSN string, logger *zap.Logger) (*PostgresStorag
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err = db.PingContext(ctx); err != nil {
+	if err = sqlDB.PingContext(ctx); err != nil {
 		return nil, err
 	}
 
-	if err := runMigrations(db); err != nil {
+	if err := runMigrations(sqlDB); err != nil {
 		return nil, fmt.Errorf("migration failed: %w", err)
 	}
 
 	return &PostgresStorage{
-		db:     DB{db, logger},
-		logger: logger,
+		db: DB{sqlDB, logger},
 	}, nil
 }
 
@@ -113,7 +111,7 @@ func (p *PostgresStorage) loadAllMetrics(ctx context.Context) ([]models.Metrics,
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
-			p.logger.Error("rows close failed", zap.Error(err))
+			p.db.logger.Error("rows close failed", zap.Error(err))
 		}
 	}()
 
@@ -143,7 +141,7 @@ func (p *PostgresStorage) loadAllMetrics(ctx context.Context) ([]models.Metrics,
 }
 
 func (p *PostgresStorage) saveMetricsBatch(ctx context.Context, metrics []models.Metrics) (*int, error) {
-	return doWithRetry(ctx, p.logger, func() (*int, error) {
+	return doWithRetry(ctx, p.db.logger, func() (*int, error) {
 		savedMetricsCount := 0
 		tx, err := p.db.BeginTx(ctx, nil)
 		if err != nil {
@@ -152,7 +150,7 @@ func (p *PostgresStorage) saveMetricsBatch(ctx context.Context, metrics []models
 		defer func() {
 			if err != nil {
 				if rbErr := tx.Rollback(); rbErr != nil {
-					p.logger.Error("rollback failed", zap.Error(rbErr))
+					p.db.logger.Error("rollback failed", zap.Error(rbErr))
 				}
 			}
 		}()
@@ -204,6 +202,8 @@ func (p *PostgresStorage) saveMetricsBatch(ctx context.Context, metrics []models
 
 }
 
+// ---- utils --------
+
 func runMigrations(db *sql.DB) error {
 	driver, err := postgres.WithInstance(db, &postgres.Config{})
 	if err != nil {
@@ -226,8 +226,6 @@ func runMigrations(db *sql.DB) error {
 
 	return nil
 }
-
-// ---- utils --------
 
 func isRetriableDBError(err error) bool {
 	var pgErr *pgconn.PgError
@@ -270,6 +268,9 @@ func doWithRetry[T any](ctx context.Context, logger *zap.Logger, fn func() (T, e
 		case <-ctx.Done():
 			return zero, ctx.Err()
 		case <-time.After(delay):
+			if ctx.Err() != nil {
+				return zero, ctx.Err()
+			}
 		}
 	}
 	return zero, nil
