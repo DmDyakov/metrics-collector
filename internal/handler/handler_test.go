@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"metrics-collector/internal/compress"
+	"metrics-collector/internal/config"
 	"metrics-collector/internal/handler/mocks"
 	models "metrics-collector/internal/model"
 
@@ -79,8 +80,9 @@ func TestHandler_UpdateHandleJSON(t *testing.T) {
 
 			gzip := compress.NewGzip()
 			mockSvc := mocks.NewMockMetricsService(ctrl)
+			mockCfg := &config.ServerConfig{SecretKey: ""}
 
-			h, err := NewHandler(mockSvc, logger, gzip)
+			h, err := NewHandler(mockSvc, logger, gzip, mockCfg)
 			require.NoError(t, err)
 
 			req := httptest.NewRequest(http.MethodPost, "/update", bytes.NewBuffer(tt.body))

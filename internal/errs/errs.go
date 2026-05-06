@@ -9,6 +9,9 @@ var (
 	ErrInvalidResponse = errors.New("invalid response data")
 	ErrInvalidRequest  = errors.New("invalid request data")
 
+	ErrRequestBodyRead  = errors.New("failed to read request body")
+	ErrInvalidSignature = errors.New("invalid signature")
+
 	// metrics
 	ErrMetricTypeRequired          = errors.New("metric type is required")
 	ErrMetricNameRequired          = errors.New("metric name is required")
@@ -27,4 +30,12 @@ type MetricNotFoundError struct {
 
 func (e *MetricNotFoundError) Error() string {
 	return fmt.Sprintf("metric %s/%s not found", e.Type, e.Name)
+}
+
+type SignatureError struct {
+	Msg string
+}
+
+func (e *SignatureError) Error() string {
+	return e.Msg
 }

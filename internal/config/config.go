@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/caarlos0/env/v11"
 	"github.com/joho/godotenv"
@@ -15,14 +16,19 @@ type AgentConfig struct {
 	PollInterval   int    `env:"POLL_INTERVAL"`
 	ReportInterval int    `env:"REPORT_INTERVAL"`
 	ServerBaseURL  string `env:"ADDRESS"`
+	SecretKey      string `env:"KEY"`
+	RateLimit      int    `env:"RATE_LIMIT"`
 }
 
 type ServerConfig struct {
-	ServerBaseURL   string `env:"ADDRESS"`
-	StoreInterval   int    `env:"STORE_INTERVAL"`
-	FileStoragePath string `env:"FILE_STORAGE_PATH"`
-	Restore         bool   `env:"RESTORE"`
-	DatabaseDSN     string `env:"DATABASE_DSN"`
+	ServerBaseURL   string        `env:"ADDRESS"`
+	StoreInterval   int           `env:"STORE_INTERVAL"`
+	FileStoragePath string        `env:"FILE_STORAGE_PATH"`
+	Restore         bool          `env:"RESTORE"`
+	DatabaseDSN     string        `env:"DATABASE_DSN"`
+	SecretKey       string        `env:"KEY"`
+	RequestTimeout  time.Duration `env:"REQ_TIMEOUT"`
+	ShutdownTimeout time.Duration `env:"SHUTDOWN_TIMEOUT"`
 }
 
 const (
@@ -33,6 +39,10 @@ const (
 	defaultFileStoragePath = ""
 	defaultRestore         = false
 	defaultDatabaseDSN     = ""
+	defaultSecretKey       = ""
+	defaultRateLimit       = 2
+	defaultRequestTimeout  = 5 * time.Second
+	defaultShutdownTimeout = 10 * time.Second
 )
 
 func NewAgentConfig(args []string) (*AgentConfig, error) {
@@ -43,6 +53,8 @@ func NewAgentConfig(args []string) (*AgentConfig, error) {
 	fs.StringVar(&cfg.ServerBaseURL, "a", defaultServerBaseURL, "address and port to run server")
 	fs.IntVar(&cfg.PollInterval, "p", defaultPollInterval, "poll interval")
 	fs.IntVar(&cfg.ReportInterval, "r", defaultReportInterval, "report interval")
+	fs.StringVar(&cfg.SecretKey, "k", defaultSecretKey, "secret key")
+	fs.IntVar(&cfg.RateLimit, "l", defaultRateLimit, "rate limit")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, err
@@ -66,6 +78,10 @@ func NewAgentConfig(args []string) (*AgentConfig, error) {
 		return nil, errors.New("report interval must be positive")
 	}
 
+	if cfg.RateLimit <= 0 {
+		cfg.RateLimit = defaultRateLimit
+	}
+
 	if cfg.ReportInterval < cfg.PollInterval {
 		return nil, fmt.Errorf("report interval (%d) must be greater than or equal to poll interval (%d)", cfg.ReportInterval, cfg.PollInterval)
 	}
@@ -83,6 +99,9 @@ func NewServerConfig(args []string) (*ServerConfig, error) {
 	fs.StringVar(&cfg.FileStoragePath, "f", defaultFileStoragePath, "file storage path")
 	fs.BoolVar(&cfg.Restore, "r", defaultRestore, "restore")
 	fs.StringVar(&cfg.DatabaseDSN, "d", defaultDatabaseDSN, "database DSN")
+	fs.StringVar(&cfg.SecretKey, "k", defaultSecretKey, "secret key")
+	fs.DurationVar(&cfg.RequestTimeout, "t", cfg.RequestTimeout, "request timeout")
+	fs.DurationVar(&cfg.ShutdownTimeout, "s", cfg.ShutdownTimeout, "shutdown timeout")
 
 	loadDotEnv()
 	if err := fs.Parse(args); err != nil {
