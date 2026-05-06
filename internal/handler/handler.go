@@ -67,7 +67,7 @@ const (
 	startTimeKey contextKey = "startTime"
 )
 
-func (h *Handler) NewMetricsRouter() chi.Router {
+func (h *Handler) RegisterRoutes() chi.Router {
 	r := chi.NewRouter()
 	r.Use(middleware.StripSlashes)
 	r.Use(h.WithTimeout)

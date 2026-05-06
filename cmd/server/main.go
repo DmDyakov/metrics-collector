@@ -57,7 +57,7 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("failed to create handler: %w", err)
 	}
 
-	r := h.NewMetricsRouter()
+	r := h.RegisterRoutes()
 
 	server := &http.Server{
 		Addr:         cfg.ServerBaseURL,
