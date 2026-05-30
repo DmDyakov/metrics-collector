@@ -258,7 +258,7 @@ func doWithRetry[T any](ctx context.Context, logger *zap.Logger, fn func() (T, e
 		}
 
 		delay := delays[attempt-1]
-		logger.Warn("retrying db operation due to retriable error",
+		logger.Warn("Retrying db operation due to retriable error",
 			zap.Int("attempt", attempt),
 			zap.Duration("delay", delay),
 			zap.Error(err),

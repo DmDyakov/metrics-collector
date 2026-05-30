@@ -5,6 +5,11 @@ const (
 	Gauge   = "gauge"
 )
 
+const (
+	PollCount   = "PoolCount"
+	RandomValue = "RandomValue"
+)
+
 // NOTE: Не усложняем пример, вводя иерархическую вложенность структур.
 // Органичиваясь плоской моделью.
 // Delta и Value объявлены через указатели,

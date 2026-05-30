@@ -65,6 +65,6 @@ func (h *Handler) WithLogging(next http.Handler) http.Handler {
 			fields = append(fields, zap.Duration("duration", duration))
 		}
 
-		h.logger.Info("response", fields...)
+		h.logger.Info("Response", fields...)
 	})
 }

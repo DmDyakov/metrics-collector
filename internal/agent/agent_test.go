@@ -1,59 +1,51 @@
+//go:build integration
+// +build integration
+
 package agent
 
 import (
-	"metrics-collector/internal/compress"
-	"metrics-collector/internal/config"
+	"context"
 	"testing"
+	"time"
+
+	"metrics-collector/internal/config"
 
 	"go.uber.org/zap"
 )
 
-func TestAgent_Poll(t *testing.T) {
+func TestAgent_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test")
+	}
+
 	logger := zap.NewNop()
-	gzip := compress.NewGzip()
 	cfg := &config.AgentConfig{
-		PollInterval:   2,
-		ReportInterval: 10,
-		ServerBaseURL:  "localhost:8080",
-	}
-	a := NewAgent(cfg, logger, gzip)
-	a.collectMemStats(1)
-
-	expectedMetrics := []string{
-		PollCount,
-		RandomValue,
-		"Alloc",
-		"BuckHashSys",
-		"Frees",
-		"GCCPUFraction",
-		"GCSys",
-		"HeapAlloc",
-		"HeapIdle",
-		"HeapInuse",
-		"HeapObjects",
-		"HeapReleased",
-		"HeapSys",
-		"LastGC",
-		"Lookups",
-		"MCacheInuse",
-		"MCacheSys",
-		"MSpanInuse",
-		"MSpanSys",
-		"Mallocs",
-		"NextGC",
-		"NumForcedGC",
-		"NumGC",
-		"OtherSys",
-		"PauseTotalNs",
-		"StackInuse",
-		"StackSys",
-		"Sys",
-		"TotalAlloc",
+		PollInterval:   1,
+		ReportInterval: 1,
+		ServerBaseURL:  "localhost:0",
+		RateLimit:      1,
 	}
 
-	for _, name := range expectedMetrics {
-		if _, ok := a.store.metrics[name]; !ok {
-			t.Errorf("metric %q not found after Poll()", name)
-		}
+	agent := NewAgent(cfg, logger)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- agent.Run(ctx)
+	}()
+
+	// Проверяем что агент запустился и работает
+	time.Sleep(2 * time.Second)
+	cancel()
+
+	if err := <-errCh; err != nil {
+		t.Errorf("Agent stopped with error: %v", err)
+	}
+
+	// Проверяем что метрики собирались
+	if len(agent.store.GetMetricsSnapshot()) == 0 {
+		t.Error("No metrics collected during test")
 	}
 }

@@ -1,6 +1,7 @@
-package agent
+package client
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"metrics-collector/internal/errs"
@@ -12,11 +13,12 @@ import (
 	"go.uber.org/zap"
 )
 
-func (a *Agent) withRetry(doRequest func() (*http.Response, error)) error {
+func (c *Client) withRetry(ctx context.Context, doRequest func() (*http.Response, error)) error {
 	delays := []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second}
 	const maxAttempts = 4
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
+
 		resp, err := doRequest()
 
 		if err == nil && resp.StatusCode == http.StatusOK {
@@ -39,13 +41,18 @@ func (a *Agent) withRetry(doRequest func() (*http.Response, error)) error {
 		}
 
 		delay := delays[attempt-1]
-		a.logger.Info("retrying after delay",
+		c.logger.Info("Retrying after delay",
 			zap.Int("attempt", attempt),
 			zap.Duration("delay", delay),
 			zap.Error(err),
 		)
 
-		time.Sleep(delay)
+		select {
+		case <-ctx.Done():
+			c.logger.Info("Retrying after delay canceled")
+			return ctx.Err()
+		case <-time.After(delay):
+		}
 	}
 	return nil
 }

@@ -71,7 +71,7 @@ func run(ctx context.Context) error {
 	defer appCancel()
 
 	go func() {
-		logger.Info("server started", zap.String("url", server.Addr))
+		logger.Info("Server started", zap.String("url", server.Addr))
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("listen error", zap.Error(err))
 			appCancel()
@@ -79,7 +79,7 @@ func run(ctx context.Context) error {
 	}()
 
 	<-appCtx.Done()
-	logger.Info("shutdown signal received")
+	logger.Info("Shutdown signal received")
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer shutdownCancel()
@@ -88,7 +88,7 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("graceful shutdown failed: %w", err)
 	}
 
-	logger.Info("server stopped gracefully")
+	logger.Info("Server stopped gracefully")
 
 	return nil
 }
