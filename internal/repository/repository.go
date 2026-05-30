@@ -34,7 +34,7 @@ func NewRepository(cfg *config.ServerConfig, logger *zap.Logger) (*Repository, e
 		logger.Info("Database DSN not provided, skipping PostgreSQL")
 	} else {
 		logger.Info("Attempting to connect to database...")
-		pgs, err := newPostgresStorage(cfg.DatabaseDSN)
+		pgs, err := newPostgresStorage(cfg.DatabaseDSN, logger)
 		if err != nil {
 			return nil, fmt.Errorf("postgres connection failed: %w", err)
 		}
@@ -60,7 +60,9 @@ func NewRepository(cfg *config.ServerConfig, logger *zap.Logger) (*Repository, e
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		logger.Info("Restore metrics started...")
-		r.restoreMetrics(ctx)
+		if err := r.restoreMetrics(ctx); err != nil {
+			return nil, err
+		}
 	}
 
 	if cfg.StoreInterval > 0 {
