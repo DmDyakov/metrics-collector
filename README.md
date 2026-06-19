@@ -55,5 +55,12 @@ go install github.com/gotesttools/gotestfmt/v2/cmd/gotestfmt@latest
 ### Команда для вывода
 go test -v -json ./... 2>&1 | gotestfmt
 
+## Генерация моков
+### Установить mockgen
+go install go.uber.org/mock/mockgen@latest
+
+### После установки проверьте:
+mockgen --version
+
 ### Обновить сгенерированные моки
 go generate ./...

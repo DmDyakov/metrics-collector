@@ -8,25 +8,20 @@ import (
 	"strconv"
 )
 
-//go:generate mockgen -destination=mocks/mock_repository.go -package=mocks . Repository
-type Repository interface {
+//go:generate mockgen -destination=mocks/mock_metrics_repository.go -package=mocks . MetricsRepository
+type MetricsRepository interface {
 	GetAllMetrics() map[string]models.Metrics
 	GetMetric(metricName string) (*models.Metrics, bool)
 	SaveMetric(ctx context.Context, metric models.Metrics) (*models.Metrics, error)
 	SaveMetricsBatch(ctx context.Context, metrics []models.Metrics) (*int, error)
-	Ping(ctx context.Context) error
 }
 
 type MetricsService struct {
-	repo Repository
+	repo MetricsRepository
 }
 
-func NewMetricsService(repo Repository) *MetricsService {
+func NewMetricsService(repo MetricsRepository) *MetricsService {
 	return &MetricsService{repo: repo}
-}
-
-func (svc *MetricsService) Ping(ctx context.Context) error {
-	return svc.repo.Ping(ctx)
 }
 
 func (svc *MetricsService) UpdateMetricByArgs(ctx context.Context, metricType, metricName, metricValue string) (*models.Metrics, error) {
@@ -104,7 +99,7 @@ func (svc *MetricsService) GetAllMetrics() ([]models.Metrics, error) {
 	return metrics, nil
 }
 
-func (svc *MetricsService) GetMetricValue(metricType, metricName string) (*string, error) {
+func (svc *MetricsService) GetMetricsValueByURL(metricType, metricName string) (*string, error) {
 	input := models.Metrics{
 		ID:    metricName,
 		MType: metricType,
@@ -146,7 +141,6 @@ func formatToString(m *models.Metrics) (string, error) {
 	}
 }
 
-// New API (JSON-based)
 func (svc *MetricsService) UpdateMetricByJSON(ctx context.Context, input models.Metrics) (*models.Metrics, error) {
 	err := svc.validateMetricFull(&input)
 	if err != nil {

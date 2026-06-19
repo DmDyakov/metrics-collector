@@ -7,98 +7,51 @@ import (
 	"errors"
 	"html/template"
 	"io"
-	"net/http"
-	"time"
-
-	"metrics-collector/internal/compress"
-	"metrics-collector/internal/config"
 	"metrics-collector/internal/errs"
 	models "metrics-collector/internal/model"
 	"metrics-collector/internal/templates"
+	"net/http"
 
-	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 )
 
+//go:generate mockgen -destination=mocks/mock_metrics_service.go -package=mocks . MetricsService
 type MetricsService interface {
 	UpdateMetricByArgs(ctx context.Context, metricType, metricName, metricValue string) (*models.Metrics, error)
 	UpdateMetricByJSON(ctx context.Context, metric models.Metrics) (*models.Metrics, error)
 	UpdateMetrics(ctx context.Context, metrics []models.Metrics) (*int, error)
-	GetMetricValue(metricType, metricName string) (*string, error)
+	GetMetricsValueByURL(metricType, metricName string) (*string, error)
 	GetMetric(m models.Metrics) (*models.Metrics, error)
 	GetAllMetrics() ([]models.Metrics, error)
-	Ping(ctx context.Context) error
 }
 
-type Handler struct {
+// MetricsHandler обрабатывает HTTP-запросы для сервиса сбора метрик.
+type MetricsHandler struct {
 	service                MetricsService
 	logger                 *zap.Logger
-	gzip                   *compress.Gzip
 	allMetricsHTMLTemplate *template.Template
-	secretKey              string
-	requestTimeout         time.Duration
 }
 
-func NewHandler(
+// NewMetricsHandler создаёт новый MetricsHandler.
+func NewMetricsHandler(
 	service MetricsService,
 	logger *zap.Logger,
-	gzip *compress.Gzip,
-	cfg *config.ServerConfig,
-) (*Handler, error) {
+) (*MetricsHandler, error) {
 	tmpl, err := template.ParseFS(templates.FS, "metrics.html")
 	if err != nil {
 		return nil, err
 	}
 
-	return &Handler{
+	return &MetricsHandler{
 		service:                service,
 		logger:                 logger,
-		gzip:                   gzip,
 		allMetricsHTMLTemplate: tmpl,
-		secretKey:              cfg.SecretKey,
-		requestTimeout:         cfg.RequestTimeout,
 	}, nil
 }
 
-type contextKey string
-
-const (
-	startTimeKey contextKey = "startTime"
-)
-
-func (h *Handler) RegisterRoutes() chi.Router {
-	r := chi.NewRouter()
-	r.Use(middleware.StripSlashes)
-	r.Use(h.WithTimeout)
-	r.Use(h.WithLogging)
-	r.Use(h.WithSignature)
-	r.Use(h.WithCompressing)
-
-	r.Get("/", h.RootHandle)
-	r.Get("/ping", h.PingHandle)
-	r.Get("/value/{type}/{name}", h.ValueHandle)
-	r.Post("/update/{type}/{name}/{value}", h.UpdateHandle)
-	r.Post("/value", h.ValueByJSONHandle)
-	r.Post("/update", h.UpdateByJSONHandle)
-	r.Post("/updates", h.UpdatesHandle)
-
-	return r
-}
-
-func (h *Handler) PingHandle(w http.ResponseWriter, r *http.Request) {
-	err := h.service.Ping(r.Context())
-	if err != nil {
-		h.logger.Error("Database ping failed", zap.Error(err))
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-
-}
-
-func (h *Handler) RootHandle(w http.ResponseWriter, r *http.Request) {
+// ListMetrics возвращает HTML-страницу со списком всех метрик.
+func (h *MetricsHandler) ListMetrics(w http.ResponseWriter, r *http.Request) {
 	allMetrics, err := h.service.GetAllMetrics()
 	if err != nil {
 		h.handleError(w, err)
@@ -117,11 +70,12 @@ func (h *Handler) RootHandle(w http.ResponseWriter, r *http.Request) {
 	buf.WriteTo(w)
 }
 
-func (h *Handler) ValueHandle(w http.ResponseWriter, r *http.Request) {
+// GetMetricValue возвращает значение метрики.
+func (h *MetricsHandler) GetMetricValue(w http.ResponseWriter, r *http.Request) {
 	metricType := chi.URLParam(r, "type")
 	metricName := chi.URLParam(r, "name")
 
-	value, err := h.service.GetMetricValue(metricType, metricName)
+	value, err := h.service.GetMetricsValueByURL(metricType, metricName)
 	if err != nil {
 		h.handleError(w, err)
 		return
@@ -132,26 +86,8 @@ func (h *Handler) ValueHandle(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func (h *Handler) UpdateHandle(w http.ResponseWriter, r *http.Request) {
-	metricType := chi.URLParam(r, "type")
-	metricName := chi.URLParam(r, "name")
-	metricValue := chi.URLParam(r, "value")
-
-	updated, err := h.service.UpdateMetricByArgs(r.Context(), metricType, metricName, metricValue)
-	if err != nil {
-		h.handleError(w, err)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	enc := json.NewEncoder(w)
-	if err := enc.Encode(updated); err != nil {
-		http.Error(w, "invalid JSON body", http.StatusInternalServerError)
-		return
-	}
-}
-
-func (h *Handler) ValueByJSONHandle(w http.ResponseWriter, r *http.Request) {
+// GetMetric возвращает метрику.
+func (h *MetricsHandler) GetMetric(w http.ResponseWriter, r *http.Request) {
 	var m models.Metrics
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&m); err != nil {
@@ -173,7 +109,28 @@ func (h *Handler) ValueByJSONHandle(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) UpdateByJSONHandle(w http.ResponseWriter, r *http.Request) {
+// UpdateMetricByURL обновляет метрику через URL-параметры.
+func (h *MetricsHandler) UpdateMetricByURL(w http.ResponseWriter, r *http.Request) {
+	metricType := chi.URLParam(r, "type")
+	metricName := chi.URLParam(r, "name")
+	metricValue := chi.URLParam(r, "value")
+
+	updated, err := h.service.UpdateMetricByArgs(r.Context(), metricType, metricName, metricValue)
+	if err != nil {
+		h.handleError(w, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	enc := json.NewEncoder(w)
+	if err := enc.Encode(updated); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusInternalServerError)
+		return
+	}
+}
+
+// UpdateMetricByJSON обновляет метрику через JSON-запрос.
+func (h *MetricsHandler) UpdateMetricByJSON(w http.ResponseWriter, r *http.Request) {
 	var m models.Metrics
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&m); err != nil {
@@ -195,7 +152,8 @@ func (h *Handler) UpdateByJSONHandle(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) UpdatesHandle(w http.ResponseWriter, r *http.Request) {
+// UpdateMetricsBatch пакетно обновляет метрики.
+func (h *MetricsHandler) UpdateMetricsBatch(w http.ResponseWriter, r *http.Request) {
 	var metrics []models.Metrics
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&metrics); err != nil {
@@ -225,7 +183,8 @@ func (h *Handler) UpdatesHandle(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) handleError(w http.ResponseWriter, err error) {
+// handleError обрабатывает ошибки сервиса и возвращает соответствующий HTTP-статус.
+func (h *MetricsHandler) handleError(w http.ResponseWriter, err error) {
 	var errMetricNotFound *errs.MetricNotFoundError
 
 	switch {

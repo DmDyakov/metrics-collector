@@ -5,7 +5,8 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"metrics-collector/internal/compress"
+	"metrics-collector/internal/agent/compress"
+
 	"net/http"
 	"time"
 

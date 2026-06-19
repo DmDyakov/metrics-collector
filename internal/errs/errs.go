@@ -9,8 +9,7 @@ var (
 	ErrInvalidResponse = errors.New("invalid response data")
 	ErrInvalidRequest  = errors.New("invalid request data")
 
-	ErrRequestBodyRead  = errors.New("failed to read request body")
-	ErrInvalidSignature = errors.New("invalid signature")
+	// ErrRequestBodyRead  = errors.New("failed to read request body")
 
 	// metrics
 	ErrMetricTypeRequired          = errors.New("metric type is required")
@@ -39,3 +38,24 @@ type SignatureError struct {
 func (e *SignatureError) Error() string {
 	return e.Msg
 }
+
+// ================================
+
+type ErrRequestBodyRead struct {
+	Method   string
+	URL      string
+	BodySize int
+	Err      error
+}
+
+func (e *ErrRequestBodyRead) Error() string {
+	return fmt.Sprintf("failed to read request body: method=%s, url=%s, body_size=%d): %v", e.Method, e.URL, e.BodySize, e.Err)
+}
+
+func (e *ErrRequestBodyRead) Unwrap() error {
+	return e.Err
+}
+
+// ================================
+
+

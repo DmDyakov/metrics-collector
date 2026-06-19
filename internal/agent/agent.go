@@ -4,9 +4,9 @@ import (
 	"context"
 
 	"metrics-collector/internal/agent/client"
+	"metrics-collector/internal/agent/compress"
 	"metrics-collector/internal/agent/store"
 	"metrics-collector/internal/agent/worker"
-	"metrics-collector/internal/compress"
 	"metrics-collector/internal/config"
 
 	"go.uber.org/zap"

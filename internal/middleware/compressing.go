@@ -1,4 +1,4 @@
-package handler
+package middleware
 
 import (
 	"compress/gzip"
@@ -48,7 +48,7 @@ func (gzr *gzipRequestReader) Close() error {
 	return gzr.originalBody.Close()
 }
 
-func (h *Handler) WithCompressing(next http.Handler) http.Handler {
+func WithCompressing(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// ========== Распаковка запроса ==========
 		if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {

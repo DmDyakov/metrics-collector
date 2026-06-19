@@ -18,7 +18,7 @@ func TestService_UpdateMetricByJSON(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		mockRepo := mocks.NewMockRepository(ctrl)
+		mockRepo := mocks.NewMockMetricsRepository(ctrl)
 		svc := NewMetricsService(mockRepo)
 
 		inputDelta := int64(10)
@@ -50,7 +50,7 @@ func TestService_UpdateMetricByJSON(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		mockRepo := mocks.NewMockRepository(ctrl)
+		mockRepo := mocks.NewMockMetricsRepository(ctrl)
 		svc := NewMetricsService(mockRepo)
 
 		inputDelta := int64(10)
@@ -95,7 +95,7 @@ func TestService_UpdateMetricByJSON(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		mockRepo := mocks.NewMockRepository(ctrl)
+		mockRepo := mocks.NewMockMetricsRepository(ctrl)
 		svc := NewMetricsService(mockRepo)
 
 		inputValue := float64(2.5)

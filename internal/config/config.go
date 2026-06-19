@@ -29,6 +29,8 @@ type ServerConfig struct {
 	SecretKey       string        `env:"KEY"`
 	RequestTimeout  time.Duration `env:"REQ_TIMEOUT"`
 	ShutdownTimeout time.Duration `env:"SHUTDOWN_TIMEOUT"`
+	AuditFile       string        `env:"AUDIT_FILE"`
+	AuditURL        string        `env:"AUDIT_URL"`
 }
 
 const (
@@ -102,6 +104,8 @@ func NewServerConfig(args []string) (*ServerConfig, error) {
 	fs.StringVar(&cfg.SecretKey, "k", defaultSecretKey, "secret key")
 	fs.DurationVar(&cfg.RequestTimeout, "t", cfg.RequestTimeout, "request timeout")
 	fs.DurationVar(&cfg.ShutdownTimeout, "s", cfg.ShutdownTimeout, "shutdown timeout")
+	fs.StringVar(&cfg.AuditFile, "audit-file", cfg.AuditFile, "audit file for logs")
+	fs.StringVar(&cfg.AuditURL, "audit-url", cfg.AuditURL, "audit url for logs")
 
 	loadDotEnv()
 	if err := fs.Parse(args); err != nil {
