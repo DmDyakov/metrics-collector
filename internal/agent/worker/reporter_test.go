@@ -34,13 +34,13 @@ func TestReporter_WorkerStopsOnClosedChannel(t *testing.T) {
 	})
 }
 
-func setupReporterTest(t *testing.T) (*Reporter, *mocks.MockStore, *mocks.MockClient) {
+func setupReporterTest(t *testing.T) (*Reporter, *mocks.MockReporterStore, *mocks.MockClient) {
 	t.Helper()
 
 	ctrl := gomock.NewController(t)
 	t.Cleanup(ctrl.Finish)
 
-	mockStore := mocks.NewMockStore(ctrl)
+	mockStore := mocks.NewMockReporterStore(ctrl)
 	mockClient := mocks.NewMockClient(ctrl)
 	logger := zap.NewNop()
 	reporter := NewReporter(mockStore, mockClient, logger, 2, 1)

@@ -14,13 +14,18 @@ import (
 	"go.uber.org/zap"
 )
 
+//go:generate mockgen -destination=mocks/mock_poller_store.go -package=mocks . PollerStore
+type PollerStore interface {
+	UpdateMetrics(metrics map[string]float64)
+}
+
 type Poller struct {
-	store        Store
+	store        PollerStore
 	logger       *zap.Logger
 	pollInterval int
 }
 
-func NewPoller(s Store, l *zap.Logger, pollInterval int) *Poller {
+func NewPoller(s PollerStore, l *zap.Logger, pollInterval int) *Poller {
 	return &Poller{
 		store:        s,
 		logger:       l,

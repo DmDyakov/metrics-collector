@@ -9,9 +9,20 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+//go:generate mockgen -destination=mocks/mock_reporter_store.go -package=mocks . ReporterStore
+type ReporterStore interface {
+	UpdateMetrics(metrics map[string]float64)
+	GetMetricsSnapshot() map[string]float64
+}
+
+//go:generate mockgen -destination=mocks/mock_client.go -package=mocks . Client
+type Client interface {
+	SendMetrics(ctx context.Context, metrics map[string]float64) error
+}
+
 type Reporter struct {
 	client Client
-	store  Store
+	store  ReporterStore
 	logger *zap.Logger
 
 	reportInterval int
@@ -19,7 +30,7 @@ type Reporter struct {
 	workers        int
 }
 
-func NewReporter(s Store, c Client, l *zap.Logger, workers int, reportInterval int) *Reporter {
+func NewReporter(s ReporterStore, c Client, l *zap.Logger, workers int, reportInterval int) *Reporter {
 	return &Reporter{
 		client:         c,
 		store:          s,

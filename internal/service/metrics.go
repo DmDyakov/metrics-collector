@@ -99,7 +99,7 @@ func (svc *MetricsService) GetAllMetrics() ([]models.Metrics, error) {
 	return metrics, nil
 }
 
-func (svc *MetricsService) GetMetricsValueByURL(metricType, metricName string) (*string, error) {
+func (svc *MetricsService) GetMetricValueByURL(metricType, metricName string) (*string, error) {
 	input := models.Metrics{
 		ID:    metricName,
 		MType: metricType,

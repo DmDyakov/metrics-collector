@@ -21,7 +21,7 @@ type MetricsService interface {
 	UpdateMetricByArgs(ctx context.Context, metricType, metricName, metricValue string) (*models.Metrics, error)
 	UpdateMetricByJSON(ctx context.Context, metric models.Metrics) (*models.Metrics, error)
 	UpdateMetrics(ctx context.Context, metrics []models.Metrics) (*int, error)
-	GetMetricsValueByURL(metricType, metricName string) (*string, error)
+	GetMetricValueByURL(metricType, metricName string) (*string, error)
 	GetMetric(m models.Metrics) (*models.Metrics, error)
 	GetAllMetrics() ([]models.Metrics, error)
 }
@@ -75,7 +75,7 @@ func (h *MetricsHandler) GetMetricValue(w http.ResponseWriter, r *http.Request) 
 	metricType := chi.URLParam(r, "type")
 	metricName := chi.URLParam(r, "name")
 
-	value, err := h.service.GetMetricsValueByURL(metricType, metricName)
+	value, err := h.service.GetMetricValueByURL(metricType, metricName)
 	if err != nil {
 		h.handleError(w, err)
 		return

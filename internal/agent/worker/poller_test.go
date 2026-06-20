@@ -21,13 +21,13 @@ func TestPoller_PollMemStats(t *testing.T) {
 	})
 }
 
-func setupPollerTest(t *testing.T) (*Poller, *mocks.MockStore) {
+func setupPollerTest(t *testing.T) (*Poller, *mocks.MockPollerStore) {
 	t.Helper()
 
 	ctrl := gomock.NewController(t)
 	t.Cleanup(ctrl.Finish)
 
-	mockStore := mocks.NewMockStore(ctrl)
+	mockStore := mocks.NewMockPollerStore(ctrl)
 	logger := zap.NewNop()
 	poller := NewPoller(mockStore, logger, 1)
 

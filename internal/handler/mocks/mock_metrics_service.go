@@ -71,19 +71,19 @@ func (mr *MockMetricsServiceMockRecorder) GetMetric(m any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetric", reflect.TypeOf((*MockMetricsService)(nil).GetMetric), m)
 }
 
-// GetMetricsValueByURL mocks base method.
-func (m *MockMetricsService) GetMetricsValueByURL(metricType, metricName string) (*string, error) {
+// GetMetricValueByURL mocks base method.
+func (m *MockMetricsService) GetMetricValueByURL(metricType, metricName string) (*string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetMetricsValueByURL", metricType, metricName)
+	ret := m.ctrl.Call(m, "GetMetricValueByURL", metricType, metricName)
 	ret0, _ := ret[0].(*string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetMetricsValueByURL indicates an expected call of GetMetricsValueByURL.
-func (mr *MockMetricsServiceMockRecorder) GetMetricsValueByURL(metricType, metricName any) *gomock.Call {
+// GetMetricValueByURL indicates an expected call of GetMetricValueByURL.
+func (mr *MockMetricsServiceMockRecorder) GetMetricValueByURL(metricType, metricName any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetricsValueByURL", reflect.TypeOf((*MockMetricsService)(nil).GetMetricsValueByURL), metricType, metricName)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetricValueByURL", reflect.TypeOf((*MockMetricsService)(nil).GetMetricValueByURL), metricType, metricName)
 }
 
 // UpdateMetricByArgs mocks base method.
