@@ -10,13 +10,11 @@ import (
 	"metrics-collector/internal/audit"
 	"metrics-collector/internal/config"
 	"metrics-collector/internal/handler"
-	"metrics-collector/internal/middleware"
 	"metrics-collector/internal/repository"
 	"metrics-collector/internal/service"
 
-	"github.com/go-chi/chi/v5"
-	chimw "github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 // App управляет жизненным циклом сервера.
@@ -48,30 +46,7 @@ func New(cfg *config.ServerConfig, logger *zap.Logger) (*App, error) {
 		return nil, fmt.Errorf("failed to create audit publisher: %w", err)
 	}
 
-	r := chi.NewRouter()
-	r.Use(chimw.StripSlashes)
-	r.Use(middleware.WithTimeout(cfg.RequestTimeout))
-	r.Use(middleware.WithLogging(logger))
-	r.Use(middleware.WithSignature(logger, cfg.SecretKey))
-	r.Use(middleware.WithCompressing)
-
-	r.Get("/ping", healthHandler.HealthDB)
-
-	r.Group(func(r chi.Router) {
-		r.Get("/", metricsHandler.ListMetrics)
-		r.Get("/value/{type}/{name}", metricsHandler.GetMetricValue)
-		r.Post("/value", metricsHandler.GetMetric)
-	})
-
-	r.Group(func(r chi.Router) {
-		if auditPublisher != nil {
-			r.Use(middleware.WithAudit(auditPublisher))
-		}
-
-		r.Post("/update/{type}/{name}/{value}", metricsHandler.UpdateMetricByURL)
-		r.Post("/update", metricsHandler.UpdateMetricByJSON)
-		r.Post("/updates", metricsHandler.UpdateMetricsBatch)
-	})
+	r := registerRoutes(healthHandler, metricsHandler, auditPublisher, logger, cfg)
 
 	server := &http.Server{
 		Addr:         cfg.ServerBaseURL,
@@ -91,35 +66,42 @@ func New(cfg *config.ServerConfig, logger *zap.Logger) (*App, error) {
 
 // Run запускает сервер и ожидает сигнала завершения.
 func (a *App) Run(ctx context.Context) error {
-	appCtx, appCancel := context.WithCancel(ctx)
-	defer appCancel()
+	g, ctx := errgroup.WithContext(ctx)
 
-	go func() {
+	g.Go(func() error {
 		a.logger.Info("Server started", zap.String("url", a.server.Addr))
 		if err := a.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			a.logger.Error("listen error", zap.Error(err))
-			appCancel()
+			return err
 		}
-	}()
+		return nil
+	})
 
-	<-appCtx.Done()
+	if a.auditPublisher != nil {
+		g.Go(func() error {
+			return a.auditPublisher.Run(ctx)
+		})
+	}
+
+	g.Go(func() error {
+		<-ctx.Done()
+		return a.shutdown()
+	})
+
+	if err := g.Wait(); err != nil && err != context.Canceled {
+		return err
+	}
+
+	return nil
+}
+
+func (a *App) shutdown() error {
 	a.logger.Info("Shutdown signal received")
 
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), a.cfg.ShutdownTimeout)
-	defer shutdownCancel()
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), a.cfg.ShutdownTimeout)
+	defer cancel()
 
 	if err := a.server.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("graceful shutdown failed: %w", err)
-	}
-
-	if a.auditPublisher != nil {
-		auditCtx, auditCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer auditCancel()
-		if err := a.auditPublisher.Shutdown(auditCtx); err != nil {
-			a.logger.Warn("audit shutdown failed", zap.Error(err))
-		} else {
-			a.logger.Info("Audit publisher stopped gracefully")
-		}
 	}
 
 	a.logger.Info("Server stopped gracefully")

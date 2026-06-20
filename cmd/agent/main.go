@@ -14,6 +14,9 @@ import (
 )
 
 func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	logger, err := logger.NewZapLogger()
 	if err != nil {
 		log.Fatalf("Failed to create agent logger: %v", err)
@@ -30,9 +33,6 @@ func main() {
 	}
 
 	agent := agent.NewAgent(cfg, logger)
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	if err := agent.Run(ctx); err != nil {
 		logger.Fatal("agent stopped with error", zap.Error(err))

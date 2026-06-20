@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -11,36 +10,35 @@ import (
 	"metrics-collector/internal/app"
 	"metrics-collector/internal/config"
 	"metrics-collector/internal/logger"
+
+	"go.uber.org/zap"
 )
 
 func main() {
-	ctx, stop := signal.NotifyContext(context.Background(),
-		os.Interrupt,
-		syscall.SIGTERM,
-	)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := run(ctx); err != nil {
-		log.Fatalf("server app failed: %v", err)
-	}
-}
-
-func run(ctx context.Context) error {
 	logger, err := logger.NewZapLogger()
 	if err != nil {
-		return fmt.Errorf("failed to create logger: %w", err)
+		log.Fatalf("failed to create logger: %v", err)
 	}
 	defer logger.Sync()
 
 	cfg, err := config.NewServerConfig(os.Args[1:])
 	if err != nil {
-		return fmt.Errorf("failed to create config: %w", err)
+		logger.Fatal("failed to create config: %v", zap.Error(err))
+	}
+
+	if cfg == nil {
+		logger.Fatal("Config is nil")
 	}
 
 	app, err := app.New(cfg, logger)
 	if err != nil {
-		return fmt.Errorf("failed to create app: %w", err)
+		logger.Fatal("failed to create app: %v", zap.Error(err))
 	}
 
-	return app.Run(ctx)
+	if err := app.Run(ctx); err != nil {
+		logger.Fatal("server app failed: %v", zap.Error(err))
+	}
 }

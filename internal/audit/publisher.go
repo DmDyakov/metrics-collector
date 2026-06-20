@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -23,10 +24,9 @@ type Event struct {
 // Publisher принимает события аудита и отправляет их всем подписчикам.
 type Publisher struct {
 	events   chan Event
-	done     chan struct{}
-	stopped  chan struct{}
 	handlers []func(Event)
 	logger   *zap.Logger
+	wg       sync.WaitGroup
 }
 
 // NewPublisher создаёт Publisher на основе конфигурации.
@@ -35,70 +35,60 @@ func NewPublisher(auditFile, auditURL string, logger *zap.Logger) (*Publisher, e
 	var handlers []func(Event)
 
 	if auditFile != "" {
-		f, err := os.OpenFile(auditFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		h, err := newFileHandler(auditFile)
 		if err != nil {
-			return nil, fmt.Errorf("audit file: %w", err)
+			return nil, err
 		}
-		handlers = append(handlers, func(e Event) {
-			json.NewEncoder(f).Encode(e)
-		})
+		handlers = append(handlers, h)
+		logger.Info("Audit publisher: file writer enabled", zap.String("path", auditFile))
 	}
 
 	if auditURL != "" {
-		client := &http.Client{Timeout: 5 * time.Second}
-		handlers = append(handlers, func(e Event) {
-			var buf bytes.Buffer
-			json.NewEncoder(&buf).Encode(e)
-			req, _ := http.NewRequest(http.MethodPost, auditURL, &buf)
-			req.Header.Set("Content-Type", "application/json")
-			resp, err := client.Do(req)
-			if err == nil {
-				resp.Body.Close()
-			}
-		})
+		handlers = append(handlers, newHTTPHandler(auditURL))
+		logger.Info("Audit publisher: HTTP sender enabled", zap.String("url", auditURL))
 	}
 
 	if len(handlers) == 0 {
 		return nil, nil
 	}
 
-	pub := &Publisher{
+	return &Publisher{
 		events:   make(chan Event, 64),
-		done:     make(chan struct{}),
-		stopped:  make(chan struct{}),
 		handlers: handlers,
 		logger:   logger,
-	}
-
-	if auditFile != "" {
-		logger.Info("Audit publisher: file writer enabled", zap.String("path", auditFile))
-	}
-	if auditURL != "" {
-		logger.Info("Audit publisher: HTTP sender enabled", zap.String("url", auditURL))
-	}
-	go pub.run()
-
-	return pub, nil
+	}, nil
 }
 
-func (p *Publisher) run() {
-	defer close(p.stopped)
+func (p *Publisher) Run(ctx context.Context) error {
+	p.logger.Info("Audit publisher started")
 
 	for {
 		select {
 		case e := <-p.events:
 			for _, h := range p.handlers {
-				go h(e)
+				p.wg.Add(1)
+				go func(h func(Event)) {
+					defer p.wg.Done()
+					h(e)
+				}(h)
 			}
-		case <-p.done:
+		case <-ctx.Done():
+			p.logger.Info("Audit publisher shutting down")
+
 			for {
 				select {
 				case e := <-p.events:
 					for _, h := range p.handlers {
-						go h(e)
+						p.wg.Add(1)
+						go func(h func(Event)) {
+							defer p.wg.Done()
+							h(e)
+						}(h)
 					}
 				default:
-					return
+					p.wg.Wait()
+					p.logger.Info("Audit publisher stopped gracefully")
+					return nil
 				}
 			}
 		}
@@ -110,15 +100,26 @@ func (p *Publisher) Notify(event Event) {
 	p.events <- event
 }
 
-// Shutdown завершает работу Publisher с таймаутом.
-func (p *Publisher) Shutdown(ctx context.Context) error {
-	close(p.done)
+func newFileHandler(path string) (func(Event), error) {
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("audit file: %w", err)
+	}
+	return func(e Event) {
+		json.NewEncoder(f).Encode(e)
+	}, nil
+}
 
-	select {
-	case <-p.stopped:
-		return nil
-	case <-ctx.Done():
-		p.logger.Warn("audit shutdown timed out")
-		return ctx.Err()
+func newHTTPHandler(url string) func(Event) {
+	client := &http.Client{Timeout: 5 * time.Second}
+	return func(e Event) {
+		var buf bytes.Buffer
+		json.NewEncoder(&buf).Encode(e)
+		req, _ := http.NewRequest(http.MethodPost, url, &buf)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := client.Do(req)
+		if err == nil {
+			resp.Body.Close()
+		}
 	}
 }
