@@ -1,4 +1,4 @@
-package repository
+package mem
 
 import (
 	models "metrics-collector/internal/model"
@@ -8,7 +8,7 @@ import (
 )
 
 func TestMemStorage_UpdateMetric(t *testing.T) {
-	ms := newMemStorage()
+	ms := NewMemStorage()
 
 	testValue := 42.5
 	testMetric := models.Metrics{
@@ -17,7 +17,7 @@ func TestMemStorage_UpdateMetric(t *testing.T) {
 		Value: &testValue,
 	}
 
-	ms.UpdateMetricByArgs(testMetric)
+	ms.SaveMetric(testMetric)
 
 	assert.Len(t, ms.metrics, 1)
 	assert.Equal(t, testMetric, ms.metrics["test_name"])

@@ -1,4 +1,4 @@
-package repository
+package postgres
 
 import (
 	"context"
@@ -42,7 +42,7 @@ func (db *DB) QueryContextWithRetry(ctx context.Context, query string, args ...a
 
 //----------------------------------
 
-func newPostgresStorage(databaseDSN string, logger *zap.Logger) (*PostgresStorage, error) {
+func NewPostgresStorage(databaseDSN string, logger *zap.Logger) (*PostgresStorage, error) {
 	sqlDB, err := sql.Open("pgx", databaseDSN)
 	if err != nil {
 		return nil, err
@@ -64,7 +64,7 @@ func newPostgresStorage(databaseDSN string, logger *zap.Logger) (*PostgresStorag
 	}, nil
 }
 
-func (p *PostgresStorage) saveMetric(ctx context.Context, m *models.Metrics) error {
+func (p *PostgresStorage) SaveMetric(ctx context.Context, m models.Metrics) error {
 	switch m.MType {
 	case models.Counter:
 		if m.Delta == nil {
@@ -100,7 +100,11 @@ func (p *PostgresStorage) saveMetric(ctx context.Context, m *models.Metrics) err
 	return nil
 }
 
-func (p *PostgresStorage) loadAllMetrics(ctx context.Context) ([]models.Metrics, error) {
+func (p *PostgresStorage) Ping(ctx context.Context) error {
+	return p.db.PingContext(ctx)
+}
+
+func (p *PostgresStorage) GetAll(ctx context.Context) ([]models.Metrics, error) {
 	var metrics []models.Metrics
 	rows, err := p.db.QueryContextWithRetry(ctx,
 		`SELECT name, 'counter' as type, value::DOUBLE PRECISION as value FROM counters
@@ -140,7 +144,7 @@ func (p *PostgresStorage) loadAllMetrics(ctx context.Context) ([]models.Metrics,
 	return metrics, nil
 }
 
-func (p *PostgresStorage) saveMetricsBatch(ctx context.Context, metrics []models.Metrics) (*int, error) {
+func (p *PostgresStorage) SaveBatch(ctx context.Context, metrics []models.Metrics) (*int, error) {
 	return doWithRetry(ctx, p.db.logger, func() (*int, error) {
 		savedMetricsCount := 0
 		tx, err := p.db.BeginTx(ctx, nil)

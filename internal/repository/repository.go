@@ -2,73 +2,110 @@ package repository
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"metrics-collector/internal/config"
 	models "metrics-collector/internal/model"
+	"metrics-collector/internal/repository/file"
+	"metrics-collector/internal/repository/mem"
+	"metrics-collector/internal/repository/postgres"
 	"time"
 
 	"go.uber.org/zap"
 )
 
+type MemStorage interface {
+	SaveMetric(metric models.Metrics)
+	SaveBatch(metrics []models.Metrics) *int
+	GetAll() map[string]models.Metrics
+	GetMetricByName(key string) (*models.Metrics, bool)
+}
+
+type PostgresStorage interface {
+	Ping(ctx context.Context) error
+	SaveMetric(ctx context.Context, m models.Metrics) error
+	SaveBatch(ctx context.Context, metrics []models.Metrics) (*int, error)
+	GetAll(ctx context.Context) ([]models.Metrics, error)
+}
+
+type FileStorage interface {
+	SaveMetric(metric models.Metrics) error
+	SaveBatch(metrics []models.Metrics) (*int, error)
+	GetAll() ([]models.Metrics, error)
+}
+
+type Mode string
+
+const (
+	ModeFile     Mode = "file"
+	ModePostgres Mode = "postgres"
+	ModeMemOnly  Mode = "mem"
+)
+
+type SyncMode string
+
+const (
+	SyncImmediate SyncMode = "immediate"
+	SyncDeferred  SyncMode = "deferred"
+)
+
 type Repository struct {
-	fileStorage     *FileStorage
-	inMemoryStorage *MemStorage
-	postgresStorage *PostgresStorage
-	storeInterval   int
-	restore         bool
-	logger          *zap.Logger
+	file          FileStorage
+	mem           MemStorage
+	pg            PostgresStorage
+	storeInterval int
+	restore       bool
+	logger        *zap.Logger
+	mode          Mode
+	syncMode      SyncMode
 }
 
 func NewRepository(cfg *config.ServerConfig, logger *zap.Logger) (*Repository, error) {
+
 	r := &Repository{
-		inMemoryStorage: newMemStorage(),
-		fileStorage:     nil,
-		postgresStorage: nil,
-		storeInterval:   cfg.StoreInterval,
-		restore:         cfg.Restore,
-		logger:          logger,
+		restore:  cfg.Restore,
+		logger:   logger,
+		mode:     ModeMemOnly,
+		syncMode: SyncDeferred,
 	}
+
+	r.mem = mem.NewMemStorage()
 
 	if cfg.DatabaseDSN == "" {
 		logger.Info("Database DSN not provided, skipping PostgreSQL")
 	} else {
 		logger.Info("Attempting to connect to database...")
-		pgs, err := newPostgresStorage(cfg.DatabaseDSN, logger)
+		pgs, err := postgres.NewPostgresStorage(cfg.DatabaseDSN, logger)
 		if err != nil {
 			return nil, fmt.Errorf("postgres connection failed: %w", err)
 		}
-		r.postgresStorage = pgs
+		r.pg = pgs
+		r.mode = ModePostgres
+		logger.Info("Storage mode: postgres storage")
 	}
 
-	if r.postgresStorage == nil {
+	if r.mode != ModePostgres {
 		logger.Info("PostgreSQL unavailable, falling back to file storage")
 
 		if cfg.FileStoragePath == "" {
-			logger.Info("File storage path not set, using in-memory storage only")
+			logger.Info("File storage path not set, skipping file storage")
 		} else {
-			fls := newFileStorage(cfg.FileStoragePath)
-			r.fileStorage = fls
+			fls := file.NewFileStorage(cfg.FileStoragePath)
+			r.file = fls
+			r.mode = ModeFile
+			logger.Info("Storage mode: file storage")
 		}
 	}
 
-	if r.fileStorage == nil && r.postgresStorage == nil {
-		return r, nil
-	}
-
-	if r.restore {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		logger.Info("Restore metrics started...")
-		if err := r.restoreMetrics(ctx); err != nil {
-			return nil, err
+	switch r.mode {
+	case ModePostgres, ModeFile:
+		if cfg.StoreInterval == 0 {
+			r.syncMode = SyncImmediate
+			logger.Info("Sync mode: immediate")
+		} else {
+			logger.Info("Sync mode: deferred")
 		}
-	}
-
-	if cfg.StoreInterval > 0 {
-		go r.startBackupWorker()
-	} else {
-		r.logger.Info("Backup worker disabled (store_interval = 0)")
+	case ModeMemOnly:
+		logger.Info("Storage mode: memory only")
 	}
 
 	return r, nil
@@ -77,159 +114,133 @@ func NewRepository(cfg *config.ServerConfig, logger *zap.Logger) (*Repository, e
 // --- Health Check -------------------------------------------------
 
 func (r *Repository) Ping(ctx context.Context) error {
-	if r.postgresStorage != nil {
-		return r.postgresStorage.db.PingContext(ctx)
+	switch r.mode {
+	case ModePostgres:
+		return r.pg.Ping(ctx)
+	default:
+		return fmt.Errorf("ping unavailable")
 	}
-
-	return errors.New("PostgreSQL is unavailable")
 }
 
 // --- Metrics CRUD -------------------------------------------------
 
 func (r *Repository) SaveMetric(ctx context.Context, metric models.Metrics) (*models.Metrics, error) {
-	updated := r.inMemoryStorage.UpdateMetricByArgs(metric)
+	r.mem.SaveMetric(metric)
 
-	if r.storeInterval != 0 {
-		return updated, nil
+	if r.syncMode == SyncDeferred {
+		return &metric, nil
 	}
 
-	if r.postgresStorage != nil {
-		if err := r.postgresStorage.saveMetric(ctx, updated); err != nil {
+	switch r.mode {
+	case ModePostgres:
+		if err := r.pg.SaveMetric(ctx, metric); err != nil {
+			return nil, err
+		}
+	case ModeFile:
+		if err := r.file.SaveMetric(metric); err != nil {
 			return nil, err
 		}
 	}
 
-	if r.fileStorage != nil {
-		if err := r.fileStorage.saveMetric(updated); err != nil {
-			return nil, err
-		}
-	}
-
-	return updated, nil
-
+	return &metric, nil
 }
 
 func (r *Repository) GetAllMetrics() map[string]models.Metrics {
-	return r.inMemoryStorage.GetAllMetrics()
+	return r.mem.GetAll()
 }
 
 func (r *Repository) GetMetric(metricName string) (*models.Metrics, bool) {
-	return r.inMemoryStorage.GetMetric(metricName)
+	return r.mem.GetMetricByName(metricName)
 }
 
 func (r *Repository) SaveMetricsBatch(ctx context.Context, metrics []models.Metrics) (*int, error) {
-	count := r.inMemoryStorage.saveMetricsBatch(metrics)
+	count := r.mem.SaveBatch(metrics)
 
-	if r.storeInterval != 0 {
+	if r.syncMode == SyncDeferred {
 		return count, nil
 	}
 
-	if r.postgresStorage != nil {
-		c, err := r.postgresStorage.saveMetricsBatch(ctx, metrics)
+	switch r.mode {
+	case ModePostgres:
+		count, err := r.pg.SaveBatch(ctx, metrics)
 		if err != nil {
 			return nil, err
 		}
-
-		count = c
-	}
-
-	if r.fileStorage != nil {
-		c, err := r.fileStorage.saveMetricsBatch(metrics)
+		return count, nil
+	case ModeFile:
+		count, err := r.file.SaveBatch(metrics)
 		if err != nil {
 			return nil, err
 		}
-
-		count = c
-	}
-
-	return count, nil
-}
-
-// --- Background Backup & Restore ----------------------------------
-
-func (r *Repository) startBackupWorker() {
-	ticker := time.NewTicker(time.Duration(r.storeInterval) * time.Second)
-	defer ticker.Stop()
-
-	r.logger.Info("Backup worker started",
-		zap.Int("interval_seconds", r.storeInterval),
-	)
-
-	for range ticker.C {
-		if err := r.backupMetrics(); err != nil {
-			r.logger.Error("backup failed", zap.Error(err))
-		} else {
-			r.logger.Debug("backup completed successfully")
-		}
+		return count, nil
+	default:
+		return count, nil
 	}
 }
 
-func (r *Repository) backupMetrics() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+// --- Backup -------------------------------------------------
+
+func (r *Repository) RestoreMetrics(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	metricsMap := r.inMemoryStorage.GetAllMetrics()
+	r.logger.Info("Restore metrics started...")
+	start := time.Now()
+	var metrics []models.Metrics
+	switch r.mode {
+	case ModePostgres:
+		ms, err := r.pg.GetAll(ctx)
+		if err != nil {
+			return fmt.Errorf("restore metrics from postgres failed:%w", err)
+		}
+		metrics = ms
+		r.logger.Info("Metrics restored",
+			zap.Int("from_postgres", len(ms)),
+			zap.Duration("took", time.Since(start)),
+		)
+	case ModeFile:
+		ms, err := r.file.GetAll()
+		if err != nil {
+			return fmt.Errorf("restore metrics from file failed:%w", err)
+		}
+		metrics = ms
+		r.logger.Info("Metrics restored",
+			zap.Int("from_file", len(ms)),
+			zap.Duration("took", time.Since(start)),
+		)
+	default:
+		return fmt.Errorf("restore metrics failed: unsupported storage mode")
+	}
+
+	r.mem.SaveBatch(metrics)
+	r.logger.Debug("restore metrics completed successfully")
+	return nil
+}
+
+func (r *Repository) BackupMetrics(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	metricsMap := r.mem.GetAll()
 	metrics := make([]models.Metrics, 0, len(metricsMap))
 	for _, metric := range metricsMap {
 		metrics = append(metrics, metric)
 	}
 
-	if r.postgresStorage != nil {
-		_, err := r.postgresStorage.saveMetricsBatch(ctx, metrics)
+	switch r.mode {
+	case ModePostgres:
+		_, err := r.pg.SaveBatch(ctx, metrics)
 		if err != nil {
 			return err
 		}
-	}
-
-	if r.fileStorage != nil {
-		_, err := r.fileStorage.saveMetricsBatch(metrics)
+	case ModeFile:
+		_, err := r.file.SaveBatch(metrics)
 		if err != nil {
 			return err
 		}
+	default:
+		return fmt.Errorf("backup metrics failed: unsupported storage mode")
 	}
 
 	return nil
-}
-
-func (r *Repository) restoreMetrics(ctx context.Context) error {
-	metrics, err := r.loadAllMetricsFromStorage(ctx)
-	if err != nil {
-		return err
-	}
-
-	r.inMemoryStorage.saveMetricsBatch(metrics)
-
-	return nil
-}
-
-func (r *Repository) loadAllMetricsFromStorage(ctx context.Context) ([]models.Metrics, error) {
-	metrics := []models.Metrics{}
-	start := time.Now()
-
-	if r.postgresStorage != nil {
-		ms, err := r.postgresStorage.loadAllMetrics(ctx)
-		if err != nil {
-			return nil, err
-		}
-		metrics = ms
-		r.logger.Info("Metrics restored",
-			zap.Int("from_db", len(ms)),
-			zap.Duration("took", time.Since(start)),
-		)
-	}
-
-	if r.fileStorage != nil && len(metrics) == 0 {
-		r.logger.Info("Metrics has been loaded from file storage")
-		ms, err := r.fileStorage.loadAllMetrics()
-		if err != nil {
-			return nil, err
-		}
-		r.logger.Info("Metrics restored",
-			zap.Int("from_filestorage", len(ms)),
-			zap.Duration("took", time.Since(start)),
-		)
-		return ms, nil
-	}
-
-	return metrics, nil
 }

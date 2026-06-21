@@ -12,6 +12,7 @@ import (
 	"metrics-collector/internal/handler"
 	"metrics-collector/internal/repository"
 	"metrics-collector/internal/service"
+	"metrics-collector/internal/worker"
 
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -23,6 +24,7 @@ type App struct {
 	logger         *zap.Logger
 	server         *http.Server
 	auditPublisher *audit.Publisher
+	backupWorker   *worker.BackupWorker
 }
 
 // New создаёт новый App.
@@ -31,6 +33,13 @@ func New(cfg *config.ServerConfig, logger *zap.Logger) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create repository: %w", err)
 	}
+
+	backupWorker := worker.NewBackupWorker(
+		cfg.Restore,
+		cfg.StoreInterval,
+		repo,
+		logger,
+	)
 
 	metricsService := service.NewMetricsService(repo)
 	healthService := service.NewHealthService(repo)
@@ -61,6 +70,7 @@ func New(cfg *config.ServerConfig, logger *zap.Logger) (*App, error) {
 		logger:         logger,
 		server:         server,
 		auditPublisher: auditPublisher,
+		backupWorker:   backupWorker,
 	}, nil
 }
 
@@ -74,6 +84,10 @@ func (a *App) Run(ctx context.Context) error {
 			return err
 		}
 		return nil
+	})
+
+	g.Go(func() error {
+		return a.backupWorker.Run(ctx)
 	})
 
 	if a.auditPublisher != nil {

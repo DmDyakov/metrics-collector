@@ -1,4 +1,4 @@
-package repository
+package file
 
 import (
 	"encoding/json"
@@ -12,14 +12,14 @@ type FileStorage struct {
 	file string
 }
 
-func newFileStorage(file string) *FileStorage {
+func NewFileStorage(file string) *FileStorage {
 	return &FileStorage{
 		file: file,
 	}
 }
 
-func (f *FileStorage) saveMetric(metric *models.Metrics) error {
-	metrics, err := f.loadAllMetrics()
+func (f *FileStorage) SaveMetric(metric models.Metrics) error {
+	metrics, err := f.GetAll()
 	if err != nil {
 		return err
 	}
@@ -27,17 +27,17 @@ func (f *FileStorage) saveMetric(metric *models.Metrics) error {
 
 	for i, m := range metrics {
 		if m.ID == metric.ID {
-			metrics[i] = *metric
+			metrics[i] = metric
 			updated = true
 			break
 		}
 	}
 
 	if !updated {
-		metrics = append(metrics, *metric)
+		metrics = append(metrics, metric)
 	}
 
-	_, err = f.saveMetricsBatch(metrics)
+	_, err = f.SaveBatch(metrics)
 	if err != nil {
 		return err
 	}
@@ -45,7 +45,7 @@ func (f *FileStorage) saveMetric(metric *models.Metrics) error {
 	return nil
 }
 
-func (f *FileStorage) saveMetricsBatch(metrics []models.Metrics) (*int, error) {
+func (f *FileStorage) SaveBatch(metrics []models.Metrics) (*int, error) {
 	data, err := json.MarshalIndent(metrics, "", "  ")
 	if err != nil {
 		return nil, err
@@ -58,7 +58,7 @@ func (f *FileStorage) saveMetricsBatch(metrics []models.Metrics) (*int, error) {
 	return &savedCount, nil
 }
 
-func (f *FileStorage) loadAllMetrics() ([]models.Metrics, error) {
+func (f *FileStorage) GetAll() ([]models.Metrics, error) {
 	file, err := os.OpenFile(f.file, os.O_RDONLY|os.O_CREATE, 0666)
 	if err != nil {
 		return nil, err
