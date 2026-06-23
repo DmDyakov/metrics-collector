@@ -5,7 +5,14 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 )
+
+var gzipWriterPool = sync.Pool{
+	New: func() any {
+		return gzip.NewWriter(io.Discard)
+	},
+}
 
 type gzipResponseWriter struct {
 	http.ResponseWriter
@@ -30,10 +37,6 @@ func (gzw *gzipResponseWriter) WriteHeader(statusCode int) {
 	gzw.Header().Del("Content-Length")
 
 	gzw.ResponseWriter.WriteHeader(statusCode)
-}
-
-func (gzw *gzipResponseWriter) Close() error {
-	return gzw.writer.Close()
 }
 
 type gzipRequestReader struct {
@@ -67,13 +70,16 @@ func WithCompressing(next http.Handler) http.Handler {
 
 		// ========== Сжатие ответа ==========
 		if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-			gzWriter := gzip.NewWriter(w)
-			defer gzWriter.Close()
+			gzWriter := gzipWriterPool.Get().(*gzip.Writer)
+			defer gzipWriterPool.Put(gzWriter)
+			gzWriter.Reset(w)
+
 			gzw := &gzipResponseWriter{
 				ResponseWriter: w,
 				writer:         gzWriter,
 			}
 			next.ServeHTTP(gzw, r)
+			gzWriter.Close()
 			return
 		}
 		// ========== Если нет нужных заголовков ==========

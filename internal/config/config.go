@@ -31,6 +31,7 @@ type ServerConfig struct {
 	ShutdownTimeout time.Duration `env:"SHUTDOWN_TIMEOUT"`
 	AuditFile       string        `env:"AUDIT_FILE"`
 	AuditURL        string        `env:"AUDIT_URL"`
+	PprofAddr       string        `env:"PPROF_ADDR"`
 }
 
 const (
