@@ -65,7 +65,7 @@ mockgen --version
 ### Обновить сгенерированные моки
 go generate ./...
 
-### Сравнение профилей после оптимизации
+## Сравнение профилей после оптимизации
 File: server_result
 Build ID: C:\Dev\Go\metrics-collector\profiles\server_result2026-06-23 08:00:01.0274394 +0300 MSK
 Type: inuse_space
@@ -159,3 +159,6 @@ Showing nodes accounting for 5722.89kB, 65.02% of 8802.19kB total
          0     0% 65.02%   513.12kB  5.83%  sync.(*Pool).Get
          0     0% 65.02%   513.12kB  5.83%  sync.(*Pool).pin
          0     0% 65.02%   512.44kB  5.82%  vendor/golang.org/x/net/http/httpguts.init
+
+## Инкремент 18
+Код отформатирован с помощью `gofmt` и `goimports`.
