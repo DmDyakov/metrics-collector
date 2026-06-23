@@ -5,12 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"html/template"
 	"io"
 	"metrics-collector/internal/errs"
 	models "metrics-collector/internal/model"
 	"metrics-collector/internal/templates"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
@@ -18,10 +20,8 @@ import (
 
 //go:generate mockgen -destination=mocks/mock_metrics_service.go -package=mocks . MetricsService
 type MetricsService interface {
-	UpdateMetricByArgs(ctx context.Context, metricType, metricName, metricValue string) (*models.Metrics, error)
-	UpdateMetricByJSON(ctx context.Context, metric models.Metrics) (*models.Metrics, error)
+	UpdateMetric(ctx context.Context, m models.Metrics) (*models.Metrics, error)
 	UpdateMetrics(ctx context.Context, metrics []models.Metrics) (*int, error)
-	GetMetricValueByURL(metricType, metricName string) (*string, error)
 	GetMetric(m models.Metrics) (*models.Metrics, error)
 	GetAllMetrics() ([]models.Metrics, error)
 }
@@ -75,23 +75,31 @@ func (h *MetricsHandler) GetMetricValue(w http.ResponseWriter, r *http.Request) 
 	metricType := chi.URLParam(r, "type")
 	metricName := chi.URLParam(r, "name")
 
-	value, err := h.service.GetMetricValueByURL(metricType, metricName)
+	m := models.Metrics{ID: metricName, MType: metricType}
+
+	metric, err := h.service.GetMetric(m)
 	if err != nil {
 		h.handleError(w, err)
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	io.WriteString(w, *value)
+	var value string
+	switch metric.MType {
+	case models.Counter:
+		value = strconv.FormatInt(*metric.Delta, 10)
+	case models.Gauge:
+		value = strconv.FormatFloat(*metric.Value, 'f', -1, 64)
+	}
 
+	w.WriteHeader(http.StatusOK)
+	io.WriteString(w, value)
 }
 
 // GetMetric возвращает метрику.
 func (h *MetricsHandler) GetMetric(w http.ResponseWriter, r *http.Request) {
 	var m models.Metrics
-	dec := json.NewDecoder(r.Body)
-	if err := dec.Decode(&m); err != nil {
-		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
+		h.handleError(w, fmt.Errorf("%w: invalid JSON body", errs.ErrInvalidRequest))
 		return
 	}
 
@@ -104,7 +112,7 @@ func (h *MetricsHandler) GetMetric(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	enc := json.NewEncoder(w)
 	if err := enc.Encode(metric); err != nil {
-		http.Error(w, "invalid JSON body", http.StatusInternalServerError)
+		http.Error(w, "failed to encode response", http.StatusInternalServerError)
 		return
 	}
 }
@@ -115,7 +123,34 @@ func (h *MetricsHandler) UpdateMetricByURL(w http.ResponseWriter, r *http.Reques
 	metricName := chi.URLParam(r, "name")
 	metricValue := chi.URLParam(r, "value")
 
-	updated, err := h.service.UpdateMetricByArgs(r.Context(), metricType, metricName, metricValue)
+	m := models.Metrics{
+		ID:    metricName,
+		MType: metricType,
+	}
+
+	switch metricType {
+	case models.Counter:
+		delta, err := strconv.ParseInt(metricValue, 10, 64)
+		if err != nil {
+			h.handleError(w, fmt.Errorf("%w: %w", errs.ErrInvalidRequest, errs.ErrInvalidCounterValue))
+			return
+		}
+		m.Delta = &delta
+
+	case models.Gauge:
+		value, err := strconv.ParseFloat(metricValue, 64)
+		if err != nil {
+			h.handleError(w, fmt.Errorf("%w: %w", errs.ErrInvalidRequest, errs.ErrInvalidGaugeValue))
+			return
+		}
+		m.Value = &value
+
+	default:
+		h.handleError(w, fmt.Errorf("%w: %w", errs.ErrInvalidRequest, errs.ErrUnknownMetricType))
+		return
+	}
+
+	updated, err := h.service.UpdateMetric(r.Context(), m)
 	if err != nil {
 		h.handleError(w, err)
 		return
@@ -124,7 +159,7 @@ func (h *MetricsHandler) UpdateMetricByURL(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Content-Type", "application/json")
 	enc := json.NewEncoder(w)
 	if err := enc.Encode(updated); err != nil {
-		http.Error(w, "invalid JSON body", http.StatusInternalServerError)
+		http.Error(w, "failed to encode response", http.StatusInternalServerError)
 		return
 	}
 }
@@ -132,13 +167,12 @@ func (h *MetricsHandler) UpdateMetricByURL(w http.ResponseWriter, r *http.Reques
 // UpdateMetricByJSON обновляет метрику через JSON-запрос.
 func (h *MetricsHandler) UpdateMetricByJSON(w http.ResponseWriter, r *http.Request) {
 	var m models.Metrics
-	dec := json.NewDecoder(r.Body)
-	if err := dec.Decode(&m); err != nil {
-		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
+		h.handleError(w, fmt.Errorf("%w: invalid JSON body", errs.ErrInvalidRequest))
 		return
 	}
 
-	updatedMetric, err := h.service.UpdateMetricByJSON(r.Context(), m)
+	updated, err := h.service.UpdateMetric(r.Context(), m)
 	if err != nil {
 		h.handleError(w, err)
 		return
@@ -146,7 +180,7 @@ func (h *MetricsHandler) UpdateMetricByJSON(w http.ResponseWriter, r *http.Reque
 
 	w.Header().Set("Content-Type", "application/json")
 	enc := json.NewEncoder(w)
-	if err := enc.Encode(updatedMetric); err != nil {
+	if err := enc.Encode(updated); err != nil {
 		http.Error(w, "failed to encode response", http.StatusInternalServerError)
 		return
 	}
@@ -155,14 +189,13 @@ func (h *MetricsHandler) UpdateMetricByJSON(w http.ResponseWriter, r *http.Reque
 // UpdateMetricsBatch пакетно обновляет метрики.
 func (h *MetricsHandler) UpdateMetricsBatch(w http.ResponseWriter, r *http.Request) {
 	var metrics []models.Metrics
-	dec := json.NewDecoder(r.Body)
-	if err := dec.Decode(&metrics); err != nil {
-		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+	if err := json.NewDecoder(r.Body).Decode(&metrics); err != nil {
+		h.handleError(w, fmt.Errorf("%w: invalid JSON body", errs.ErrInvalidRequest))
 		return
 	}
 
 	if len(metrics) == 0 {
-		http.Error(w, "empty metrics array", http.StatusBadRequest)
+		h.handleError(w, fmt.Errorf("%w: empty metrics array", errs.ErrInvalidRequest))
 		return
 	}
 
@@ -195,7 +228,8 @@ func (h *MetricsHandler) handleError(w http.ResponseWriter, err error) {
 	case errors.As(err, &errMetricNotFound):
 		http.Error(w, errMetricNotFound.Error(), http.StatusNotFound)
 
-	case errors.Is(err, errs.ErrUnknownMetricType),
+	case errors.Is(err, errs.ErrInvalidRequest),
+		errors.Is(err, errs.ErrUnknownMetricType),
 		errors.Is(err, errs.ErrMetricTypeMismatch),
 		errors.Is(err, errs.ErrInvalidCounterValue),
 		errors.Is(err, errs.ErrInvalidGaugeValue),

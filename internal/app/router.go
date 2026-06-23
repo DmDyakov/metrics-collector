@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// registerRoutes registers all HTTP server routes with middleware.
 func registerRoutes(
 	healthHandler *handler.HealthHandler,
 	metricsHandler *handler.MetricsHandler,

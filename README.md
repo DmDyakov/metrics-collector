@@ -65,7 +65,7 @@ mockgen --version
 ### Обновить сгенерированные моки
 go generate ./...
 
-## Сравнение профилей после оптимизации
+## Инкремент 17 Сравнение профилей после оптимизации
 File: server_result
 Build ID: C:\Dev\Go\metrics-collector\profiles\server_result2026-06-23 08:00:01.0274394 +0300 MSK
 Type: inuse_space

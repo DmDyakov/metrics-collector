@@ -12,6 +12,7 @@ type BackupRepository interface {
 	BackupMetrics(ctx context.Context) error
 }
 
+// BackupWorker periodically saves in-memory metrics to persistent storage.
 type BackupWorker struct {
 	restore       bool
 	storeInterval int
@@ -19,6 +20,7 @@ type BackupWorker struct {
 	logger        *zap.Logger
 }
 
+// NewBackupWorker creates a new BackupWorker.
 func NewBackupWorker(
 	restore bool,
 	storeInterval int,
@@ -33,6 +35,7 @@ func NewBackupWorker(
 	}
 }
 
+// Run starts periodic backup of metrics.
 func (b *BackupWorker) Run(ctx context.Context) error {
 	if b.restore {
 		if err := b.repo.RestoreMetrics(ctx); err != nil {

@@ -13,6 +13,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// Agent manages metrics collection and reporting to the server.
 type Agent struct {
 	cfg      *config.AgentConfig
 	logger   *zap.Logger
@@ -22,6 +23,7 @@ type Agent struct {
 	reporter *worker.Reporter
 }
 
+// NewAgent creates a new agent with the given configuration.
 func NewAgent(cfg *config.AgentConfig, l *zap.Logger) *Agent {
 	store := store.New()
 	gzip := compress.NewGzip()
@@ -39,6 +41,7 @@ func NewAgent(cfg *config.AgentConfig, l *zap.Logger) *Agent {
 	}
 }
 
+// Run starts the agent: metrics collection and reporting to the server.
 func (a *Agent) Run(ctx context.Context) error {
 	a.logger.Info("Starting agent",
 		zap.Int("rate_limit", a.cfg.RateLimit),

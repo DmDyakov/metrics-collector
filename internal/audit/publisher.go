@@ -14,14 +14,13 @@ import (
 	"go.uber.org/zap"
 )
 
-// Event представляет событие аудита.
 type Event struct {
 	Timestamp int64    `json:"ts"`
 	Metrics   []string `json:"metrics"`
 	IPAddress string   `json:"ip_address"`
 }
 
-// Publisher принимает события аудита и отправляет их всем подписчикам.
+// Publisher receives audit events and sends them to all subscribers.
 type Publisher struct {
 	events   chan Event
 	handlers []func(Event)
@@ -29,8 +28,8 @@ type Publisher struct {
 	wg       sync.WaitGroup
 }
 
-// NewPublisher создаёт Publisher на основе конфигурации.
-// Возвращает nil, если аудит не настроен.
+// NewPublisher creates a Publisher for writing to file and/or sending via HTTP.
+// Returns nil if audit is not configured.
 func NewPublisher(auditFile, auditURL string, logger *zap.Logger) (*Publisher, error) {
 	var handlers []func(Event)
 
@@ -59,6 +58,7 @@ func NewPublisher(auditFile, auditURL string, logger *zap.Logger) (*Publisher, e
 	}, nil
 }
 
+// Run starts processing audit events until the context is done.
 func (p *Publisher) Run(ctx context.Context) error {
 	p.logger.Info("Audit publisher started")
 
@@ -95,7 +95,7 @@ func (p *Publisher) Run(ctx context.Context) error {
 	}
 }
 
-// Notify отправляет событие аудита.
+// Notify sends an audit event to the channel.
 func (p *Publisher) Notify(event Event) {
 	p.events <- event
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// AgentConfig holds the agent configuration for metrics collection.
 type AgentConfig struct {
 	PollInterval   int    `env:"POLL_INTERVAL"`
 	ReportInterval int    `env:"REPORT_INTERVAL"`
@@ -20,6 +21,7 @@ type AgentConfig struct {
 	RateLimit      int    `env:"RATE_LIMIT"`
 }
 
+// ServerConfig holds the server configuration for metrics collection.
 type ServerConfig struct {
 	ServerBaseURL   string        `env:"ADDRESS"`
 	StoreInterval   int           `env:"STORE_INTERVAL"`
@@ -48,6 +50,7 @@ const (
 	defaultShutdownTimeout = 10 * time.Second
 )
 
+// NewAgentConfig creates an agent configuration from CLI arguments and environment variables.
 func NewAgentConfig(args []string) (*AgentConfig, error) {
 	fs := flag.NewFlagSet("agent", flag.ContinueOnError)
 
@@ -92,6 +95,7 @@ func NewAgentConfig(args []string) (*AgentConfig, error) {
 	return cfg, nil
 }
 
+// NewServerConfig creates a server configuration from CLI arguments and environment variables.
 func NewServerConfig(args []string) (*ServerConfig, error) {
 	fs := flag.NewFlagSet("server", flag.ContinueOnError)
 
@@ -129,6 +133,7 @@ func NewServerConfig(args []string) (*ServerConfig, error) {
 	return cfg, nil
 }
 
+// loadDotEnv loads variables from a .env file if it exists.
 func loadDotEnv() {
 	if err := godotenv.Load(); err != nil && !errors.Is(err, os.ErrNotExist) {
 		log.Printf("Warning: could not load .env file: %v", err)

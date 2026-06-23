@@ -34,7 +34,7 @@ func (w *auditResponseWriter) Write(b []byte) (int, error) {
 	return w.ResponseWriter.Write(b)
 }
 
-// WithAudit отправляет события аудита после успешной обработки метрик.
+// WithAudit middleware sends audit events after successful metrics processing.
 func WithAudit(publisher *audit.Publisher) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

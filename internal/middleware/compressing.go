@@ -51,6 +51,7 @@ func (gzr *gzipRequestReader) Close() error {
 	return gzr.originalBody.Close()
 }
 
+// WithCompressing middleware compresses responses with gzip and decompresses incoming requests.
 func WithCompressing(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// ========== Распаковка запроса ==========

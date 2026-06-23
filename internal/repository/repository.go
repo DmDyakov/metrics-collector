@@ -48,21 +48,20 @@ const (
 	SyncDeferred  SyncMode = "deferred"
 )
 
+// Repository manages metric storage across memory, file, and database.
 type Repository struct {
-	file          FileStorage
-	mem           MemStorage
-	pg            PostgresStorage
-	storeInterval int
-	restore       bool
-	logger        *zap.Logger
-	mode          Mode
-	syncMode      SyncMode
+	file     FileStorage
+	mem      MemStorage
+	pg       PostgresStorage
+	logger   *zap.Logger
+	mode     Mode
+	syncMode SyncMode
 }
 
+// NewRepository creates a Repository based on server configuration.
 func NewRepository(cfg *config.ServerConfig, logger *zap.Logger) (*Repository, error) {
 
 	r := &Repository{
-		restore:  cfg.Restore,
 		logger:   logger,
 		mode:     ModeMemOnly,
 		syncMode: SyncDeferred,
@@ -113,6 +112,7 @@ func NewRepository(cfg *config.ServerConfig, logger *zap.Logger) (*Repository, e
 
 // --- Health Check -------------------------------------------------
 
+// Ping checks the database connection.
 func (r *Repository) Ping(ctx context.Context) error {
 	switch r.mode {
 	case ModePostgres:
@@ -124,6 +124,7 @@ func (r *Repository) Ping(ctx context.Context) error {
 
 // --- Metrics CRUD -------------------------------------------------
 
+// SaveMetric saves a metric to memory and syncs it to persistent storage.
 func (r *Repository) SaveMetric(ctx context.Context, metric models.Metrics) (*models.Metrics, error) {
 	r.mem.SaveMetric(metric)
 
@@ -145,14 +146,17 @@ func (r *Repository) SaveMetric(ctx context.Context, metric models.Metrics) (*mo
 	return &metric, nil
 }
 
+// GetAllMetrics returns all metrics from memory.
 func (r *Repository) GetAllMetrics() map[string]models.Metrics {
 	return r.mem.GetAll()
 }
 
+// GetMetric returns a metric by name from memory.
 func (r *Repository) GetMetric(metricName string) (*models.Metrics, bool) {
 	return r.mem.GetMetricByName(metricName)
 }
 
+// SaveMetricsBatch batch-saves metrics to memory and syncs them to persistent storage.
 func (r *Repository) SaveMetricsBatch(ctx context.Context, metrics []models.Metrics) (*int, error) {
 	count := r.mem.SaveBatch(metrics)
 
@@ -180,6 +184,7 @@ func (r *Repository) SaveMetricsBatch(ctx context.Context, metrics []models.Metr
 
 // --- Backup -------------------------------------------------
 
+// RestoreMetrics restores metrics from persistent storage into memory.
 func (r *Repository) RestoreMetrics(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -217,6 +222,7 @@ func (r *Repository) RestoreMetrics(ctx context.Context) error {
 	return nil
 }
 
+// BackupMetrics saves all in-memory metrics to persistent storage.
 func (r *Repository) BackupMetrics(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()

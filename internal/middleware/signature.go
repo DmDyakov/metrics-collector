@@ -80,6 +80,8 @@ func createSignature(data []byte, secretKey string) []byte {
 	return hmacHash.Sum(nil)
 }
 
+// WithSignature middleware verifies the HMAC signature of incoming requests
+// and signs outgoing responses.
 func WithSignature(logger *zap.Logger, secretKey string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

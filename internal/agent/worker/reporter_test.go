@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"testing"
+	"time"
 
 	"metrics-collector/internal/agent/worker/mocks"
 
@@ -46,4 +47,26 @@ func setupReporterTest(t *testing.T) (*Reporter, *mocks.MockReporterStore, *mock
 	reporter := NewReporter(mockStore, mockClient, logger, 2, 1)
 
 	return reporter, mockStore, mockClient
+}
+
+func TestReporter_Scheduler(t *testing.T) {
+	t.Run("sends batch to jobs channel", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockStore := mocks.NewMockReporterStore(ctrl)
+		mockClient := mocks.NewMockClient(ctrl)
+		logger := zap.NewNop()
+		reporter := NewReporter(mockStore, mockClient, logger, 1, 100) // большой интервал
+
+		v := 42.5
+		snapshot := map[string]float64{"cpu": v}
+		mockStore.EXPECT().GetMetricsSnapshot().Return(snapshot).AnyTimes()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+		defer cancel()
+
+		err := reporter.scheduler(ctx)
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
+	})
 }
