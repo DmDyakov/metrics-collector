@@ -26,7 +26,7 @@ type MetricsService interface {
 	GetAllMetrics() ([]models.Metrics, error)
 }
 
-// MetricsHandler обрабатывает HTTP-запросы для сервиса сбора метрик.
+// generate:reset
 type MetricsHandler struct {
 	service                MetricsService
 	logger                 *zap.Logger

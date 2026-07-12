@@ -20,6 +20,7 @@ type Client interface {
 	SendMetrics(ctx context.Context, metrics map[string]float64) error
 }
 
+// generate:reset
 type Reporter struct {
 	client Client
 	store  ReporterStore

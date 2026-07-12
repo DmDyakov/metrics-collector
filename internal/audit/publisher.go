@@ -20,7 +20,7 @@ type Event struct {
 	IPAddress string   `json:"ip_address"`
 }
 
-// Publisher receives audit events and sends them to all subscribers.
+// generate:reset
 type Publisher struct {
 	events   chan Event
 	handlers []func(Event)

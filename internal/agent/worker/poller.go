@@ -19,6 +19,7 @@ type PollerStore interface {
 	UpdateMetrics(metrics map[string]float64)
 }
 
+// generate:reset
 type Poller struct {
 	store        PollerStore
 	logger       *zap.Logger
