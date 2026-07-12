@@ -1,4 +1,3 @@
-// ./cmd/reset/main.go
 package main
 
 import (
