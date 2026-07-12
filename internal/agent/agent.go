@@ -13,7 +13,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// generate:reset
 type Agent struct {
 	cfg      *config.AgentConfig
 	logger   *zap.Logger

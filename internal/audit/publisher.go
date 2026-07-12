@@ -20,7 +20,6 @@ type Event struct {
 	IPAddress string   `json:"ip_address"`
 }
 
-// generate:reset
 type Publisher struct {
 	events   chan Event
 	handlers []func(Event)

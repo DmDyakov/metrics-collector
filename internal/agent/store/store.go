@@ -4,7 +4,6 @@ import (
 	"sync"
 )
 
-// generate:reset
 type Store struct {
 	metrics map[string]float64
 	mu      sync.RWMutex

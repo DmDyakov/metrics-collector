@@ -13,7 +13,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// generate:reset
 type Client struct {
 	baseURL    string
 	secretKey  string

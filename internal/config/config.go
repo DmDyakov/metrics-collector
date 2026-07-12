@@ -12,7 +12,6 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// generate:reset
 type AgentConfig struct {
 	PollInterval   int    `env:"POLL_INTERVAL"`
 	ReportInterval int    `env:"REPORT_INTERVAL"`
@@ -21,7 +20,6 @@ type AgentConfig struct {
 	RateLimit      int    `env:"RATE_LIMIT"`
 }
 
-// generate:reset
 type ServerConfig struct {
 	ServerBaseURL   string        `env:"ADDRESS"`
 	StoreInterval   int           `env:"STORE_INTERVAL"`

@@ -26,7 +26,6 @@ type MetricsService interface {
 	GetAllMetrics() ([]models.Metrics, error)
 }
 
-// generate:reset
 type MetricsHandler struct {
 	service                MetricsService
 	logger                 *zap.Logger
