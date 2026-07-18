@@ -52,7 +52,7 @@ func (c *Client) SendMetrics(ctx context.Context, batch map[string]float64) erro
 	}
 
 	doRequest := func() (*http.Response, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 
 		req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(reqBody))
