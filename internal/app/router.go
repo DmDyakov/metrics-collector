@@ -36,7 +36,7 @@ func registerRoutes(
 
 	r.Group(func(r chi.Router) {
 		if auditPublisher != nil {
-			r.Use(middleware.WithAudit(auditPublisher))
+			r.Use(middleware.WithAudit(logger, auditPublisher))
 		}
 
 		r.Post("/update/{type}/{name}/{value}", metricsHandler.UpdateMetricByURL)

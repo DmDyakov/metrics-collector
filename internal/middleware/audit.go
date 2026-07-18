@@ -11,6 +11,7 @@ import (
 	models "metrics-collector/internal/model"
 
 	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
 )
 
 type auditResponseWriter struct {
@@ -35,10 +36,19 @@ func (w *auditResponseWriter) Write(b []byte) (int, error) {
 }
 
 // WithAudit middleware sends audit events after successful metrics processing.
-func WithAudit(publisher *audit.Publisher) func(next http.Handler) http.Handler {
+func WithAudit(logger *zap.Logger, publisher *audit.Publisher) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			body, _ := io.ReadAll(r.Body)
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				logger.Error("failed to read request body for audit",
+					zap.Error(err),
+					zap.String("method", r.Method),
+					zap.String("path", r.URL.Path),
+				)
+				next.ServeHTTP(w, r)
+				return
+			}
 			r.Body = io.NopCloser(bytes.NewBuffer(body))
 
 			start := time.Now()
