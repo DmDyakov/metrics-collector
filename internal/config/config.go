@@ -12,6 +12,7 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// AgentConfig holds the agent configuration for metrics collection.
 type AgentConfig struct {
 	PollInterval   int    `env:"POLL_INTERVAL"`
 	ReportInterval int    `env:"REPORT_INTERVAL"`
@@ -20,6 +21,7 @@ type AgentConfig struct {
 	RateLimit      int    `env:"RATE_LIMIT"`
 }
 
+// ServerConfig holds the server configuration for metrics collection.
 type ServerConfig struct {
 	ServerBaseURL   string        `env:"ADDRESS"`
 	StoreInterval   int           `env:"STORE_INTERVAL"`
@@ -29,6 +31,9 @@ type ServerConfig struct {
 	SecretKey       string        `env:"KEY"`
 	RequestTimeout  time.Duration `env:"REQ_TIMEOUT"`
 	ShutdownTimeout time.Duration `env:"SHUTDOWN_TIMEOUT"`
+	AuditFile       string        `env:"AUDIT_FILE"`
+	AuditURL        string        `env:"AUDIT_URL"`
+	PprofAddr       string        `env:"PPROF_ADDR"`
 }
 
 const (
@@ -45,6 +50,7 @@ const (
 	defaultShutdownTimeout = 10 * time.Second
 )
 
+// NewAgentConfig creates an agent configuration from CLI arguments and environment variables.
 func NewAgentConfig(args []string) (*AgentConfig, error) {
 	fs := flag.NewFlagSet("agent", flag.ContinueOnError)
 
@@ -89,6 +95,7 @@ func NewAgentConfig(args []string) (*AgentConfig, error) {
 	return cfg, nil
 }
 
+// NewServerConfig creates a server configuration from CLI arguments and environment variables.
 func NewServerConfig(args []string) (*ServerConfig, error) {
 	fs := flag.NewFlagSet("server", flag.ContinueOnError)
 
@@ -102,6 +109,8 @@ func NewServerConfig(args []string) (*ServerConfig, error) {
 	fs.StringVar(&cfg.SecretKey, "k", defaultSecretKey, "secret key")
 	fs.DurationVar(&cfg.RequestTimeout, "t", cfg.RequestTimeout, "request timeout")
 	fs.DurationVar(&cfg.ShutdownTimeout, "s", cfg.ShutdownTimeout, "shutdown timeout")
+	fs.StringVar(&cfg.AuditFile, "audit-file", cfg.AuditFile, "audit file for logs")
+	fs.StringVar(&cfg.AuditURL, "audit-url", cfg.AuditURL, "audit url for logs")
 
 	loadDotEnv()
 	if err := fs.Parse(args); err != nil {
@@ -124,6 +133,7 @@ func NewServerConfig(args []string) (*ServerConfig, error) {
 	return cfg, nil
 }
 
+// loadDotEnv loads variables from a .env file if it exists.
 func loadDotEnv() {
 	if err := godotenv.Load(); err != nil && !errors.Is(err, os.ErrNotExist) {
 		log.Printf("Warning: could not load .env file: %v", err)

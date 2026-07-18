@@ -4,7 +4,6 @@ import (
 	"context"
 	"log"
 	"metrics-collector/internal/agent"
-	"metrics-collector/internal/compress"
 	"metrics-collector/internal/config"
 	"metrics-collector/internal/logger"
 	"os"
@@ -15,6 +14,9 @@ import (
 )
 
 func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	logger, err := logger.NewZapLogger()
 	if err != nil {
 		log.Fatalf("Failed to create agent logger: %v", err)
@@ -30,11 +32,11 @@ func main() {
 		logger.Fatal("Config is nil")
 	}
 
-	gzip := compress.NewGzip()
-	agent := agent.NewAgent(cfg, logger, gzip)
+	agent := agent.NewAgent(cfg, logger)
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
+	if err := agent.Run(ctx); err != nil {
+		logger.Fatal("agent stopped with error", zap.Error(err))
+	}
 
-	agent.Run(ctx)
+	logger.Info("Agent stopped gracefully")
 }
