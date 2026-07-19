@@ -1,3 +1,4 @@
+// Package agent реализует агента сбора метрик
 package agent
 
 import (

@@ -1,3 +1,4 @@
+// Package pprof запускает сервер профилирования.
 package pprof
 
 import (

@@ -1,3 +1,4 @@
+// Package repository определяет интерфейсы для хранения метрик.
 package repository
 
 import (

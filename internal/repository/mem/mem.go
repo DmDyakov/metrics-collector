@@ -1,3 +1,4 @@
+// Package mem реализует хранение метрик в памяти.
 package mem
 
 import (

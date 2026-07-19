@@ -1,3 +1,4 @@
+// Package dto содержит объекты передачи данных между компонентами системы.
 package dto
 
 // generate:reset

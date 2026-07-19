@@ -1,3 +1,4 @@
+// Package worker содержит фоновые задачи
 package worker
 
 import (

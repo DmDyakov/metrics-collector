@@ -1,3 +1,4 @@
+// Package worker содержит воркеры агента.
 package worker
 
 import (

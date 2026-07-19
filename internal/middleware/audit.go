@@ -1,3 +1,4 @@
+// Package middleware содержит middleware для HTTP-сервера
 package middleware
 
 import (
