@@ -1,3 +1,4 @@
+// Package audit реализует аудит
 package audit
 
 import (

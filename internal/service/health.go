@@ -1,3 +1,4 @@
+// Package service содержит бизнес-логику работы с метриками.
 package service
 
 import (

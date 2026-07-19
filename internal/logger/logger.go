@@ -1,3 +1,4 @@
+// Package logger предоставляет функции для логирования с разными уровнями.
 package logger
 
 import (
