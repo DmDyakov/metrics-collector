@@ -18,21 +18,11 @@ jobs:
       - name: Format check
         run: make check-fmt
 
-      - name: Cache golangci-lint
-        uses: actions/cache@v4
-        id: cache-golangci
-        with:
-          path: ~/go/bin/golangci-lint
-          key: ${{ runner.os }}-golangci-lint-${{ hashFiles('go.mod') }}
-          restore-keys: |
-            ${{ runner.os }}-golangci-lint-
-
       - name: Install golangci-lint
-        if: steps.cache-golangci.outputs.cache-hit != 'true'
         run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
 
       - name: Lint
-        run: ~/go/bin/golangci-lint run ./...
+        run: golangci-lint run ./...
 
       - name: Staticlint
         run: go run ./cmd/staticlint/ ./...
