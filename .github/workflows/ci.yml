@@ -18,10 +18,11 @@ jobs:
       - name: Format check
         run: make check-fmt
 
+      - name: Install golangci-lint
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
+
       - name: Lint
-        uses: golangci/golangci-lint-action@v4
-        with:
-          version: latest
+        run: golangci-lint run ./...
 
       - name: Staticlint
         run: go run ./cmd/staticlint/ ./...
