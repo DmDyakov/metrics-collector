@@ -1,3 +1,4 @@
+// Package store реализует хранилище метрик в памяти агента.
 package store
 
 import (

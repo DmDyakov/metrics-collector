@@ -1,3 +1,4 @@
+// Package postgres реализует хранение метрик в базе данных PostgreSQL.
 package postgres
 
 import (
@@ -126,11 +127,11 @@ func (p *PostgresStorage) GetAll(ctx context.Context) ([]models.Metrics, error) 
 			return nil, err
 		}
 
-		switch {
-		case m.MType == models.Counter:
+		switch m.MType {
+		case models.Counter:
 			delta := int64(value)
 			m.Delta = &delta
-		case m.MType == models.Gauge:
+		case models.Gauge:
 			m.Value = &value
 		}
 

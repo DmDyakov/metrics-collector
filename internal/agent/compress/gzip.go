@@ -1,3 +1,4 @@
+// Package compress предоставляет функции для сжатия и распаковки данных
 package compress
 
 import (

@@ -1,3 +1,4 @@
+// Package errs содержит кастомные ошибки приложения.
 package errs
 
 import (
@@ -8,8 +9,6 @@ import (
 var (
 	ErrInvalidResponse = errors.New("invalid response data")
 	ErrInvalidRequest  = errors.New("invalid request data")
-
-	// ErrRequestBodyRead  = errors.New("failed to read request body")
 
 	// metrics
 	ErrMetricTypeRequired          = errors.New("metric type is required")
@@ -55,7 +54,3 @@ func (e *ErrRequestBodyRead) Error() string {
 func (e *ErrRequestBodyRead) Unwrap() error {
 	return e.Err
 }
-
-// ================================
-
-
