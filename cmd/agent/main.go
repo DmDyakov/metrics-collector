@@ -6,6 +6,7 @@ import (
 	"metrics-collector/internal/agent"
 	"metrics-collector/internal/config"
 	"metrics-collector/internal/logger"
+	"metrics-collector/pkg/buildinfo"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,6 +15,8 @@ import (
 )
 
 func main() {
+	buildinfo.Print()
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 

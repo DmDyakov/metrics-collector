@@ -11,11 +11,14 @@ import (
 	"metrics-collector/internal/config"
 	"metrics-collector/internal/logger"
 	"metrics-collector/internal/pprof"
+	"metrics-collector/pkg/buildinfo"
 
 	"go.uber.org/zap"
 )
 
 func main() {
+	buildinfo.Print()
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
