@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap"
 )
 
+//go:generate mockgen -destination=mocks/mock_mem_storage.go -package=mocks metrics-collector/internal/repository MemStorage
 type MemStorage interface {
 	SaveMetric(metric models.Metrics)
 	SaveBatch(metrics []models.Metrics) *int
@@ -21,6 +22,7 @@ type MemStorage interface {
 	GetMetricByName(key string) (*models.Metrics, bool)
 }
 
+//go:generate mockgen -destination=mocks/mock_postgres_storage.go -package=mocks metrics-collector/internal/repository PostgresStorage
 type PostgresStorage interface {
 	Ping(ctx context.Context) error
 	SaveMetric(ctx context.Context, m models.Metrics) error
@@ -28,6 +30,7 @@ type PostgresStorage interface {
 	GetAll(ctx context.Context) ([]models.Metrics, error)
 }
 
+//go:generate mockgen -destination=mocks/mock_file_storage.go -package=mocks metrics-collector/internal/repository FileStorage
 type FileStorage interface {
 	SaveMetric(metric models.Metrics) error
 	SaveBatch(metrics []models.Metrics) (*int, error)

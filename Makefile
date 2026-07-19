@@ -6,6 +6,19 @@ COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
 BIN_DIR := bin
 
+COVERAGE_FILE := coverage.out
+COVERAGE_MIN := 50
+COVERAGE_EXCLUDE := \
+	/cmd/ \
+	/mocks \
+	/dto \
+	/model \
+	/logger \
+	/pprof \
+	/pool \
+	/buildinfo \
+	/templates
+
 LDFLAGS := -X $(MODULE)/pkg/buildinfo.Version=$(VERSION) \
            -X $(MODULE)/pkg/buildinfo.Date=$(DATE) \
            -X $(MODULE)/pkg/buildinfo.Commit=$(COMMIT)
@@ -25,6 +38,12 @@ test-short:
 .PHONY: test-verbose
 test-verbose:
 	go test -v -json ./... 2>&1 | gotestfmt
+
+.PHONY: test-coverage
+test-coverage:
+	go test -coverprofile=$(COVERAGE_FILE) -covermode=atomic \
+		$$(go list ./... | grep -v -E '$(subst $(eval) ,|,$(strip $(COVERAGE_EXCLUDE)))')
+	go tool cover -func=$(COVERAGE_FILE)
 
 .PHONY: build-server
 build-server:
@@ -47,7 +66,7 @@ run-agent:
 
 .PHONY: lint
 lint:
-	go vet ./...
+	golangci-lint run ./...
 
 .PHONY: fmt
 fmt:
@@ -61,7 +80,7 @@ check-fmt:
 
 .PHONY: clean
 clean:
-	rm -rf $(BIN_DIR)
+	rm -rf $(BIN_DIR) $(COVERAGE_FILE)
 
 .PHONY: all
-all: fmt lint test build-all
+all: fmt lint test-coverage build-all
