@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"metrics-collector/internal/errs"
 	models "metrics-collector/internal/model"
 	"metrics-collector/internal/service/mocks"
@@ -118,6 +119,87 @@ func TestService_UpdateMetric(t *testing.T) {
 		assert.Equal(t, *result.Value, *input.Value)
 		assert.Nil(t, result.Delta)
 	})
+	t.Run("negative: empty metric ID", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockRepo := mocks.NewMockMetricsRepository(ctrl)
+		svc := NewMetricsService(mockRepo)
+
+		input := models.Metrics{ID: "", MType: models.Gauge}
+
+		_, err := svc.UpdateMetric(ctx, input)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errs.ErrInvalidRequest)
+	})
+
+	t.Run("negative: unknown metric type", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockRepo := mocks.NewMockMetricsRepository(ctrl)
+		svc := NewMetricsService(mockRepo)
+
+		input := models.Metrics{ID: "test", MType: "invalid"}
+
+		_, err := svc.UpdateMetric(ctx, input)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errs.ErrInvalidRequest)
+		assert.ErrorIs(t, err, errs.ErrUnknownMetricType)
+	})
+
+	t.Run("negative: gauge without value", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockRepo := mocks.NewMockMetricsRepository(ctrl)
+		svc := NewMetricsService(mockRepo)
+
+		input := models.Metrics{ID: "test", MType: models.Gauge, Value: nil}
+
+		_, err := svc.UpdateMetric(ctx, input)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errs.ErrInvalidRequest)
+		assert.ErrorIs(t, err, errs.ErrMetricValueForGaugeRequired)
+	})
+
+	t.Run("negative: counter without delta", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockRepo := mocks.NewMockMetricsRepository(ctrl)
+		svc := NewMetricsService(mockRepo)
+
+		input := models.Metrics{ID: "test", MType: models.Counter, Delta: nil}
+
+		_, err := svc.UpdateMetric(ctx, input)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errs.ErrInvalidRequest)
+		assert.ErrorIs(t, err, errs.ErrMetricDeltaForCountRequired)
+	})
+
+	t.Run("negative: save metric fails", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockRepo := mocks.NewMockMetricsRepository(ctrl)
+		svc := NewMetricsService(mockRepo)
+
+		delta := int64(10)
+		input := models.Metrics{ID: "test", MType: models.Counter, Delta: &delta}
+
+		mockRepo.EXPECT().
+			GetMetric("test").
+			Return(nil, false)
+
+		mockRepo.EXPECT().
+			SaveMetric(gomock.Any(), input).
+			Return(nil, errors.New("db error"))
+
+		_, err := svc.UpdateMetric(ctx, input)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errs.ErrInvalidResponse)
+	})
 }
 
 func TestService_GetMetric(t *testing.T) {
@@ -155,6 +237,49 @@ func TestService_GetMetric(t *testing.T) {
 		var notFound *errs.MetricNotFoundError
 		require.ErrorAs(t, err, &notFound)
 	})
+
+	t.Run("negative: empty metric name", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockRepo := mocks.NewMockMetricsRepository(ctrl)
+		svc := NewMetricsService(mockRepo)
+
+		_, err := svc.GetMetric(models.Metrics{ID: "", MType: models.Gauge})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errs.ErrInvalidRequest)
+	})
+
+	t.Run("negative: type mismatch", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockRepo := mocks.NewMockMetricsRepository(ctrl)
+		svc := NewMetricsService(mockRepo)
+
+		value := float64(42.5)
+		existing := &models.Metrics{ID: "test", MType: models.Gauge, Value: &value}
+
+		mockRepo.EXPECT().GetMetric("test").Return(existing, true)
+
+		input := models.Metrics{ID: "test", MType: models.Counter}
+		_, err := svc.GetMetric(input)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errs.ErrInvalidResponse)
+		assert.ErrorIs(t, err, errs.ErrMetricTypeMismatch)
+	})
+
+	t.Run("negative: invalid metric type in request", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockRepo := mocks.NewMockMetricsRepository(ctrl)
+		svc := NewMetricsService(mockRepo)
+
+		_, err := svc.GetMetric(models.Metrics{ID: "test", MType: "invalid"})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errs.ErrInvalidRequest)
+	})
 }
 
 func TestService_GetAllMetrics(t *testing.T) {
@@ -175,5 +300,59 @@ func TestService_GetAllMetrics(t *testing.T) {
 		result, err := svc.GetAllMetrics()
 		require.NoError(t, err)
 		assert.Len(t, result, 2)
+	})
+}
+
+func TestService_UpdateMetrics(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("positive: batch update with duplicates", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockRepo := mocks.NewMockMetricsRepository(ctrl)
+		svc := NewMetricsService(mockRepo)
+
+		delta1 := int64(10)
+		delta2 := int64(20)
+		batch := []models.Metrics{
+			{ID: "c1", MType: models.Counter, Delta: &delta1},
+			{ID: "c1", MType: models.Counter, Delta: &delta2},
+		}
+
+		mockRepo.EXPECT().
+			GetMetric("c1").
+			Return(nil, false)
+
+		count := 1
+		mockRepo.EXPECT().
+			SaveMetricsBatch(ctx, gomock.Any()).
+			DoAndReturn(func(_ context.Context, metrics []models.Metrics) (*int, error) {
+				require.Len(t, metrics, 1)
+				assert.Equal(t, int64(30), *metrics[0].Delta)
+				return &count, nil
+			})
+
+		result, err := svc.UpdateMetrics(ctx, batch)
+		require.NoError(t, err)
+		assert.Equal(t, 1, *result)
+	})
+
+	t.Run("negative: invalid metric in batch", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockRepo := mocks.NewMockMetricsRepository(ctrl)
+		svc := NewMetricsService(mockRepo)
+
+		delta := int64(10)
+		batch := []models.Metrics{
+			{ID: "ok", MType: models.Counter, Delta: &delta},
+			{ID: "bad", MType: "invalid", Delta: &delta},
+		}
+
+		_, err := svc.UpdateMetrics(ctx, batch)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errs.ErrInvalidRequest)
 	})
 }
