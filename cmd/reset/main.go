@@ -202,7 +202,7 @@ func genFieldReset(buf *bytes.Buffer, fieldName string, expr ast.Expr) {
 	default:
 		// Для вложенных структур
 		buf.WriteString(fmt.Sprintf("\tif v, ok := interface{}(%s).(interface{ Reset() }); ok {\n", accessor))
-		buf.WriteString(fmt.Sprintf("\t\tv.Reset()\n\t}\n"))
+		buf.WriteString("\t\tv.Reset()\n\t}\n")
 	}
 }
 
@@ -222,7 +222,7 @@ func genIdentReset(buf *bytes.Buffer, fieldName, accessor string, id *ast.Ident)
 		buf.WriteString(fmt.Sprintf("\tvar zero %s\n", id.Name))
 		buf.WriteString(fmt.Sprintf("\t%s = zero\n", accessor))
 		buf.WriteString(fmt.Sprintf("\tif v, ok := interface{}(%s).(interface{ Reset() }); ok {\n", accessor))
-		buf.WriteString(fmt.Sprintf("\t\tv.Reset()\n\t}\n"))
+		buf.WriteString("\t\tv.Reset()\n\t}\n")
 	}
 }
 
@@ -253,7 +253,7 @@ func genPointerReset(buf *bytes.Buffer, fieldName, accessor string, baseType ast
 	default:
 		// Для вложенных структур через указатель
 		buf.WriteString(fmt.Sprintf("\t\tif v, ok := interface{}(%s).(interface{ Reset() }); ok {\n", deref))
-		buf.WriteString(fmt.Sprintf("\t\t\tv.Reset()\n\t\t}\n"))
+		buf.WriteString("\t\t\tv.Reset()\n\t\t}\n")
 	}
 	buf.WriteString("\t}\n")
 }

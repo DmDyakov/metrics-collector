@@ -66,7 +66,9 @@ func (h *MetricsHandler) ListMetrics(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	buf.WriteTo(w)
+	if _, err := buf.WriteTo(w); err != nil {
+		h.logger.Error("failed to write HTML response", zap.Error(err))
+	}
 }
 
 // GetMetricValue возвращает значение метрики.
@@ -91,7 +93,9 @@ func (h *MetricsHandler) GetMetricValue(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.WriteHeader(http.StatusOK)
-	io.WriteString(w, value)
+	if _, err := io.WriteString(w, value); err != nil {
+		h.logger.Error("failed to write metric value", zap.Error(err))
+	}
 }
 
 // GetMetric возвращает метрику.

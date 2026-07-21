@@ -52,7 +52,9 @@ func (f *FileStorage) SaveBatch(metrics []models.Metrics) (*int, error) {
 		return nil, err
 	}
 
-	os.WriteFile(f.file, data, 0644)
+	if err := os.WriteFile(f.file, data, 0644); err != nil {
+		return nil, err
+	}
 
 	savedCount := len(metrics)
 

@@ -117,7 +117,10 @@ func WithSignature(logger *zap.Logger, secretKey string) func(http.Handler) http
 			w.WriteHeader(srw.statusCode)
 
 			if r.Method != http.MethodHead && srw.buffer.Len() > 0 {
-				w.Write(srw.buffer.Bytes())
+				if _, err := w.Write(srw.buffer.Bytes()); err != nil {
+					logger.Error("failed to write response body",
+						zap.Error(err))
+				}
 			}
 		})
 	}

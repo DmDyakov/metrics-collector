@@ -24,7 +24,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create agent logger: %v", err)
 	}
-	defer logger.Sync()
+	defer func() {
+		if err := logger.Sync(); err != nil {
+			log.Printf("Failed to sync logger: %v", err)
+		}
+	}()
 
 	cfg, err := config.NewAgentConfig(os.Args[1:])
 	if err != nil {
