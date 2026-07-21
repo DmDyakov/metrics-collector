@@ -28,4 +28,4 @@ jobs:
         run: go run ./cmd/staticlint/ ./...
 
       - name: Tests with coverage
-        run: make check-coverage
+        run: make test-coverage

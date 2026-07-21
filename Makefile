@@ -8,16 +8,7 @@ BIN_DIR := bin
 
 COVERAGE_FILE := coverage.out
 COVERAGE_MIN := 50
-COVERAGE_EXCLUDE := \
-	/cmd/ \
-	/mocks \
-	/dto \
-	/model \
-	/logger \
-	/pprof \
-	/pool \
-	/buildinfo \
-	/templates
+COVERAGE_EXCLUDE := /cmd/|/mocks|/dto|/model|/logger|/pprof|/pool|/buildinfo|/templates
 
 LDFLAGS := -X $(MODULE)/pkg/buildinfo.Version=$(VERSION) \
            -X $(MODULE)/pkg/buildinfo.Date=$(DATE) \
@@ -42,8 +33,8 @@ test-verbose:
 .PHONY: test-coverage
 test-coverage:
 	go test -coverprofile=$(COVERAGE_FILE) -covermode=atomic \
-		$$(go list ./... | grep -v -E '$(subst $(eval) ,|,$(strip $(COVERAGE_EXCLUDE)))')
-	go tool cover -func=$(COVERAGE_FILE)
+		$$(go list ./... | grep -v -E '$(COVERAGE_EXCLUDE)')
+	@go tool cover -func=$(COVERAGE_FILE) | awk 'END{ gsub("%", "", $$3); if($$3+0 < $(COVERAGE_MIN)+0){ print "Coverage "$$3"% is below minimum $(COVERAGE_MIN)%"; exit 1 } else { print "Coverage "$$3"% OK (minimum $(COVERAGE_MIN)%)" } }'
 
 .PHONY: build-server
 build-server:
