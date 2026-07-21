@@ -1,6 +1,8 @@
 // Package dto содержит объекты передачи данных между компонентами системы.
 package dto
 
+// Metric представляет собой DTO метрики
+//
 // generate:reset
 type Metric struct {
 	ID    string   `json:"id"`
