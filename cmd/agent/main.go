@@ -22,11 +22,11 @@ func main() {
 
 	logger, err := logger.NewZapLogger()
 	if err != nil {
-		log.Fatalf("Failed to create agent logger: %v", err)
+		log.Fatalf("failed to create logger: %v", err)
 	}
 	defer func() {
 		if err := logger.Sync(); err != nil {
-			log.Printf("Failed to sync logger: %v", err)
+			log.Fatalf("failed to sync logger: %v", err)
 		}
 	}()
 

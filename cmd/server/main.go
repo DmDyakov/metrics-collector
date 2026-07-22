@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -29,7 +28,7 @@ func main() {
 	}
 	defer func() {
 		if err := logger.Sync(); err != nil {
-			fmt.Fprintf(os.Stderr, "failed to sync logger: %v\n", err)
+			log.Fatalf("failed to sync logger: %v", err)
 		}
 	}()
 
@@ -39,7 +38,7 @@ func main() {
 	}
 
 	if cfg == nil {
-		logger.Fatal("Config is nil")
+		logger.Fatal("config is nil")
 	}
 
 	app, err := app.New(cfg, logger)

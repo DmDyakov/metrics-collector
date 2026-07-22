@@ -1,4 +1,4 @@
-// Утилита для автоматической генерации методов Reset()
+// Package main реализует утилиту для автоматической генерации методов Reset()
 // для структур, помеченных комментарием // generate:reset.
 //
 // Утилита сканирует все пакеты проекта, начиная с корневой директории,
@@ -85,7 +85,7 @@ func processDir(root string) error {
 
 func processPackage(dir string) error {
 	cfg := &packages.Config{
-		Mode: packages.NeedName | packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes,
+		Mode: packages.NeedName | packages.NeedFiles | packages.NeedSyntax,
 		Dir:  dir,
 	}
 
