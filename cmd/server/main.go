@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -28,7 +29,7 @@ func main() {
 	}
 	defer func() {
 		if err := logger.Sync(); err != nil {
-			log.Fatalf("failed to sync logger: %v", err)
+			fmt.Fprintf(os.Stderr, "failed to sync logger: %v\n", err)
 		}
 	}()
 
