@@ -6,7 +6,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"metrics-collector/internal/agent/compress"
+	"metrics-collector/pkg/compress"
 
 	"net/http"
 	"time"
@@ -45,6 +45,7 @@ func (c *Client) SendMetrics(ctx context.Context, batch map[string]float64) erro
 
 	url := fmt.Sprintf("http://%s/updates", c.baseURL)
 	method := http.MethodPost
+
 	reqBody, err := c.compress(c.toDto(batch))
 	if err != nil {
 		c.logger.Warn("Failed to compress metrics, skipping sending", zap.Error(err))

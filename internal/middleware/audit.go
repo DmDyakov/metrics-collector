@@ -68,7 +68,7 @@ func WithAudit(logger *zap.Logger, publisher *audit.Publisher) func(next http.Ha
 
 			publisher.Notify(audit.Event{
 				Timestamp: start.Unix(),
-				Metrics:   metrics,
+				Metrics:      metrics,
 				IPAddress: r.RemoteAddr,
 			})
 		})

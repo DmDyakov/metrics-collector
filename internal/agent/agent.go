@@ -5,10 +5,10 @@ import (
 	"context"
 
 	"metrics-collector/internal/agent/client"
-	"metrics-collector/internal/agent/compress"
 	"metrics-collector/internal/agent/store"
 	"metrics-collector/internal/agent/worker"
 	"metrics-collector/internal/config"
+	"metrics-collector/pkg/compress"
 
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"

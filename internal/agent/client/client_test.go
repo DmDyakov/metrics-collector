@@ -8,8 +8,8 @@ import (
 	"syscall"
 	"testing"
 
-	"metrics-collector/internal/agent/compress"
 	models "metrics-collector/internal/model"
+	"metrics-collector/pkg/compress"
 
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"

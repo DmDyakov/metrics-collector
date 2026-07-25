@@ -10,9 +10,9 @@ import (
 
 	"metrics-collector/internal/app"
 	"metrics-collector/internal/config"
-	"metrics-collector/internal/logger"
-	"metrics-collector/internal/pprof"
 	"metrics-collector/pkg/buildinfo"
+	"metrics-collector/pkg/logger"
+	"metrics-collector/pkg/pprof"
 
 	"go.uber.org/zap"
 )
