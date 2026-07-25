@@ -1,4 +1,3 @@
-// pkg/signer/errors.go
 package signer
 
 import (
