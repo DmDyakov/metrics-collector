@@ -11,7 +11,7 @@ import (
 
 func TestWithSignature(t *testing.T) {
 	t.Run("passes request when no secret key", func(t *testing.T) {
-		handler := WithSignature(zap.NewNop(), "")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := WithSignature(zap.NewNop(), nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}))
 
@@ -23,7 +23,7 @@ func TestWithSignature(t *testing.T) {
 	})
 
 	t.Run("passes request without signature header", func(t *testing.T) {
-		handler := WithSignature(zap.NewNop(), "secret")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := WithSignature(zap.NewNop(), nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}))
 

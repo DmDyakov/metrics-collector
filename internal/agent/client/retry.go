@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"metrics-collector/internal/errs"
 	"net"
 	"net/http"
 	"syscall"
@@ -23,11 +22,6 @@ func (c *Client) withRetry(ctx context.Context, doRequest func() (*http.Response
 
 		if err == nil && resp.StatusCode == http.StatusOK {
 			return nil
-		}
-
-		var signatureError *errs.SignatureError
-		if errors.As(err, &signatureError) {
-			return err
 		}
 
 		if !isRetriable(resp, err) || attempt == maxAttempts {

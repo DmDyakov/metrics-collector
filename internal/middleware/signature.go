@@ -2,12 +2,9 @@ package middleware
 
 import (
 	"bytes"
-	"crypto/hmac"
-	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"io"
-	"metrics-collector/internal/errs"
+	"metrics-collector/pkg/signer"
 	"net/http"
 
 	"go.uber.org/zap"
@@ -35,63 +32,18 @@ func (w *signResponseWriter) WriteHeader(statusCode int) {
 	w.statusCode = statusCode
 }
 
-func checkRequestSignature(r *http.Request, secretKey string) error {
-	if r.Header.Get("HashSHA256") == "" {
-		return nil
-	}
-
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		return &errs.ErrRequestBodyRead{
-			Method:   r.Method,
-			URL:      r.URL.String(),
-			BodySize: len(body),
-			Err:      err,
-		}
-	}
-
-	r.Body = io.NopCloser(bytes.NewBuffer(body)) // восстанавливаем тело
-
-	headerValue := r.Header.Get("HashSHA256")
-	received, err := hex.DecodeString(headerValue)
-	if err != nil {
-		return &errs.ErrInvalidHexFormat{
-			HeaderValue: headerValue,
-			Err:         err,
-		}
-	}
-
-	expected := createSignature(body, secretKey)
-
-	if !hmac.Equal(received, expected) {
-		return &errs.ErrSignedBodyMismatch{
-			Expected: hex.EncodeToString(expected),
-			Received: hex.EncodeToString(received),
-		}
-	}
-
-	return nil
-}
-
-func createSignature(data []byte, secretKey string) []byte {
-	hmacHash := hmac.New(sha256.New, []byte(secretKey))
-	hmacHash.Write(data)
-
-	return hmacHash.Sum(nil)
-}
-
 // WithSignature middleware verifies the HMAC signature of incoming requests
 // and signs outgoing responses.
-func WithSignature(logger *zap.Logger, secretKey string) func(http.Handler) http.Handler {
+func WithSignature(logger *zap.Logger, s *signer.Signer) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if secretKey == "" {
+			if s == nil {
 				next.ServeHTTP(w, r)
 				return
 			}
 
-			if err := checkRequestSignature(r, secretKey); err != nil {
-				if errors.Is(err, errs.ErrInvalidSignature) {
+			if err := s.CheckRequestSignature(r); err != nil {
+				if errors.Is(err, signer.ErrInvalidSignature) {
 					http.Error(w, err.Error(), http.StatusBadRequest)
 					return
 				}
@@ -110,7 +62,7 @@ func WithSignature(logger *zap.Logger, secretKey string) func(http.Handler) http
 			next.ServeHTTP(srw, r)
 
 			if srw.buffer.Len() > 0 {
-				signature := createSignature(srw.buffer.Bytes(), secretKey)
+				signature := s.CreateSignature(srw.buffer.Bytes())
 				w.Header().Set("HashSHA256", hex.EncodeToString(signature))
 			}
 

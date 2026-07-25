@@ -72,7 +72,7 @@ func TestClient_CreateSignature(t *testing.T) {
 	t.Run("creates HMAC signature", func(t *testing.T) {
 		c := New("localhost:8080", "secret", zap.NewNop(), compress.NewGzip())
 
-		sig := c.createSignature([]byte("test"))
+		sig := c.signer.CreateSignature([]byte("test"))
 		assert.NotEmpty(t, sig)
 		assert.Len(t, sig, 32)
 	})

@@ -5,6 +5,7 @@ import (
 	"metrics-collector/internal/config"
 	"metrics-collector/internal/handler"
 	"metrics-collector/internal/middleware"
+	"metrics-collector/pkg/signer"
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
@@ -23,7 +24,7 @@ func registerRoutes(
 	r.Use(chimw.StripSlashes)
 	r.Use(middleware.WithTimeout(cfg.RequestTimeout))
 	r.Use(middleware.WithLogging(logger))
-	r.Use(middleware.WithSignature(logger, cfg.SecretKey))
+	r.Use(middleware.WithSignature(logger, signer.New(cfg.SecretKey, logger)))
 	r.Use(middleware.WithCompressing)
 
 	r.Get("/ping", healthHandler.HealthDB)
