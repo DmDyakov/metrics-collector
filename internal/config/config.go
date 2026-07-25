@@ -15,25 +15,27 @@ import (
 )
 
 type AgentConfig struct {
-	PollInterval   int    `env:"POLL_INTERVAL"`
-	ReportInterval int    `env:"REPORT_INTERVAL"`
-	ServerBaseURL  string `env:"ADDRESS"`
-	SecretKey      string `env:"KEY"`
-	RateLimit      int    `env:"RATE_LIMIT"`
+	PollInterval    int    `env:"POLL_INTERVAL"`
+	ReportInterval  int    `env:"REPORT_INTERVAL"`
+	ServerBaseURL   string `env:"ADDRESS"`
+	SecretKey       string `env:"KEY"`
+	PublicCryptoKey string `env:"CRYPTO_KEY"`
+	RateLimit       int    `env:"RATE_LIMIT"`
 }
 
 type ServerConfig struct {
-	ServerBaseURL   string        `env:"ADDRESS"`
-	StoreInterval   int           `env:"STORE_INTERVAL"`
-	FileStoragePath string        `env:"FILE_STORAGE_PATH"`
-	Restore         bool          `env:"RESTORE"`
-	DatabaseDSN     string        `env:"DATABASE_DSN"`
-	SecretKey       string        `env:"KEY"`
-	RequestTimeout  time.Duration `env:"REQ_TIMEOUT"`
-	ShutdownTimeout time.Duration `env:"SHUTDOWN_TIMEOUT"`
-	AuditFile       string        `env:"AUDIT_FILE"`
-	AuditURL        string        `env:"AUDIT_URL"`
-	PprofAddr       string        `env:"PPROF_ADDR"`
+	ServerBaseURL    string        `env:"ADDRESS"`
+	StoreInterval    int           `env:"STORE_INTERVAL"`
+	FileStoragePath  string        `env:"FILE_STORAGE_PATH"`
+	Restore          bool          `env:"RESTORE"`
+	DatabaseDSN      string        `env:"DATABASE_DSN"`
+	SecretKey        string        `env:"KEY"`
+	PrivateCryptoKey string        `env:"CRYPTO_KEY"`
+	RequestTimeout   time.Duration `env:"REQ_TIMEOUT"`
+	ShutdownTimeout  time.Duration `env:"SHUTDOWN_TIMEOUT"`
+	AuditFile        string        `env:"AUDIT_FILE"`
+	AuditURL         string        `env:"AUDIT_URL"`
+	PprofAddr        string        `env:"PPROF_ADDR"`
 }
 
 const (
@@ -61,6 +63,7 @@ func NewAgentConfig(args []string) (*AgentConfig, error) {
 	fs.IntVar(&cfg.ReportInterval, "r", defaultReportInterval, "report interval")
 	fs.StringVar(&cfg.SecretKey, "k", defaultSecretKey, "secret key")
 	fs.IntVar(&cfg.RateLimit, "l", defaultRateLimit, "rate limit")
+	fs.StringVar(&cfg.PublicCryptoKey, "crypto-key", "", "path to public key file for encryption")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, err
@@ -111,6 +114,7 @@ func NewServerConfig(args []string) (*ServerConfig, error) {
 	fs.DurationVar(&cfg.ShutdownTimeout, "s", cfg.ShutdownTimeout, "shutdown timeout")
 	fs.StringVar(&cfg.AuditFile, "audit-file", cfg.AuditFile, "audit file for logs")
 	fs.StringVar(&cfg.AuditURL, "audit-url", cfg.AuditURL, "audit url for logs")
+	fs.StringVar(&cfg.PrivateCryptoKey, "crypto-key", "", "path to private key file for decryption")
 
 	loadDotEnv()
 	if err := fs.Parse(args); err != nil {

@@ -12,11 +12,10 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"io"
 
 	"net/http"
-
-	"go.uber.org/zap"
 )
 
 // Signer создаёт и проверяет HMAC-SHA256 подписи HTTP-запросов и ответов.
@@ -24,19 +23,16 @@ import (
 // у клиента и сервера.
 type Signer struct {
 	secretKey string
-	logger    *zap.Logger
 }
 
 // New создаёт новый Signer.
-func New(secretKey string, logger *zap.Logger) *Signer {
+func New(secretKey string) (*Signer, error) {
 	if secretKey == "" {
-		logger.Warn("signer initialized with empty secret key - signatures disabled")
-		return nil
+		return nil, fmt.Errorf("failed to initialize signer with empty secret key")
 	}
 	return &Signer{
 		secretKey: secretKey,
-		logger:    logger,
-	}
+	}, nil
 }
 
 // CreateSignature вычисляет HMAC-SHA256 подпись для переданных данных.

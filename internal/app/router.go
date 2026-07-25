@@ -5,6 +5,7 @@ import (
 	"metrics-collector/internal/config"
 	"metrics-collector/internal/handler"
 	"metrics-collector/internal/middleware"
+	"metrics-collector/pkg/encryptor"
 	"metrics-collector/pkg/signer"
 
 	"github.com/go-chi/chi/v5"
@@ -17,6 +18,8 @@ func registerRoutes(
 	healthHandler *handler.HealthHandler,
 	metricsHandler *handler.MetricsHandler,
 	auditPublisher *audit.Publisher,
+	signer *signer.Signer,
+	encryptor *encryptor.Encryptor,
 	logger *zap.Logger,
 	cfg *config.ServerConfig,
 ) *chi.Mux {
@@ -24,7 +27,9 @@ func registerRoutes(
 	r.Use(chimw.StripSlashes)
 	r.Use(middleware.WithTimeout(cfg.RequestTimeout))
 	r.Use(middleware.WithLogging(logger))
-	r.Use(middleware.WithSignature(logger, signer.New(cfg.SecretKey, logger)))
+
+	r.Use(middleware.WithSignature(logger, signer))
+	r.Use(middleware.WithDecryption(logger, encryptor))
 	r.Use(middleware.WithCompressing)
 
 	r.Get("/ping", healthHandler.HealthDB)

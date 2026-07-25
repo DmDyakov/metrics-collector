@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"metrics-collector/pkg/compress"
+	"metrics-collector/pkg/encryptor"
 	"metrics-collector/pkg/signer"
 
 	"net/http"
@@ -19,17 +20,25 @@ import (
 type Client struct {
 	baseURL    string
 	signer     *signer.Signer
+	encryptor  *encryptor.Encryptor
 	httpClient *http.Client
 	gzip       *compress.Gzip
 	logger     *zap.Logger
 }
 
-func New(baseURL, secretKey string, logger *zap.Logger, gzip *compress.Gzip) *Client {
+func New(
+	baseURL string,
+	logger *zap.Logger,
+	signer *signer.Signer,
+	encryptor *encryptor.Encryptor,
+	gzip *compress.Gzip,
+) *Client {
 	return &Client{
-		baseURL: baseURL,
-		signer:  signer.New(secretKey, logger),
-		gzip:    gzip,
-		logger:  logger,
+		baseURL:   baseURL,
+		signer:    signer,
+		encryptor: encryptor,
+		gzip:      gzip,
+		logger:    logger,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
@@ -48,23 +57,33 @@ func (c *Client) SendMetrics(ctx context.Context, batch map[string]float64) erro
 	url := fmt.Sprintf("http://%s/updates", c.baseURL)
 	method := http.MethodPost
 
-	jsonPayload, err := json.Marshal(c.toDto(batch))
+	jsonData, err := json.Marshal(c.toDto(batch))
 	if err != nil {
 		c.logger.Error("error JSON marshaling", zap.Error(err))
 		return err
 	}
 
-	compressedPayload, err := c.gzip.Compress(jsonPayload)
+	compressedData, err := c.gzip.Compress(jsonData)
 	if err != nil {
 		c.logger.Error("error JSON compressing", zap.Error(err))
 		return err
+	}
+
+	payload := compressedData
+
+	if c.encryptor != nil {
+		payload, err = c.encryptor.Encrypt(compressedData)
+		if err != nil {
+			c.logger.Error("failed to encrypt data", zap.Error(err))
+			return err
+		}
 	}
 
 	doRequest := func() (*http.Response, error) {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 
-		req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(compressedPayload))
+		req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(payload))
 		if err != nil {
 			c.logger.Error("failed to build request",
 				zap.String("uri", url),
@@ -75,7 +94,7 @@ func (c *Client) SendMetrics(ctx context.Context, batch map[string]float64) erro
 		}
 
 		if c.signer != nil {
-			req.Header.Set("HashSHA256", hex.EncodeToString(c.signer.CreateSignature(compressedPayload)))
+			req.Header.Set("HashSHA256", hex.EncodeToString(c.signer.CreateSignature(payload)))
 		}
 
 		req.Header.Set("Content-Type", "application/json")
@@ -90,7 +109,7 @@ func (c *Client) SendMetrics(ctx context.Context, batch map[string]float64) erro
 		if resp != nil {
 			defer resp.Body.Close()
 
-			if c.signer != nil {
+			if c.signer != nil && resp.StatusCode == http.StatusOK {
 				err = c.signer.CheckResponseSignature(resp)
 			}
 		}

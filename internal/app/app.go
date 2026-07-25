@@ -14,6 +14,8 @@ import (
 	"metrics-collector/internal/repository"
 	"metrics-collector/internal/service"
 	"metrics-collector/internal/worker"
+	"metrics-collector/pkg/encryptor"
+	"metrics-collector/pkg/signer"
 
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -56,7 +58,21 @@ func New(cfg *config.ServerConfig, logger *zap.Logger) (*App, error) {
 		return nil, fmt.Errorf("failed to create audit publisher: %w", err)
 	}
 
-	r := registerRoutes(healthHandler, metricsHandler, auditPublisher, logger, cfg)
+	signer, err := signer.New(cfg.SecretKey)
+	if err != nil {
+		logger.Error(err.Error())
+	}
+
+	encryptor, err := encryptor.New("", cfg.PrivateCryptoKey)
+	if err != nil {
+		logger.Error("failed to create encryptor", zap.Error(err))
+	} else if encryptor != nil {
+		logger.Info("encryptor created", zap.String("key_path", cfg.PrivateCryptoKey))
+	} else {
+		logger.Warn("encryptor is nil — encryption disabled")
+	}
+
+	r := registerRoutes(healthHandler, metricsHandler, auditPublisher, signer, encryptor, logger, cfg)
 
 	server := &http.Server{
 		Addr:         cfg.ServerBaseURL,
