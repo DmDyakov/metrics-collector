@@ -1,3 +1,4 @@
+// Package models содержит доменные модели метрик.
 package models
 
 const (
@@ -15,6 +16,10 @@ const (
 // Delta и Value объявлены через указатели,
 // что бы отличать значение "0", от не заданного значения
 // и соответственно не кодировать в структуру.
+
+// Metrics представляет собой модель метрики
+//
+// generate:reset
 type Metrics struct {
 	ID    string   `json:"id"`
 	MType string   `json:"type"`

@@ -1,3 +1,5 @@
+// Package config предоставляет функции для загрузки и парсинга конфигурации
+// из переменных окружения и флагов командной строки.
 package config
 
 import (
@@ -12,7 +14,6 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// AgentConfig holds the agent configuration for metrics collection.
 type AgentConfig struct {
 	PollInterval   int    `env:"POLL_INTERVAL"`
 	ReportInterval int    `env:"REPORT_INTERVAL"`
@@ -21,7 +22,6 @@ type AgentConfig struct {
 	RateLimit      int    `env:"RATE_LIMIT"`
 }
 
-// ServerConfig holds the server configuration for metrics collection.
 type ServerConfig struct {
 	ServerBaseURL   string        `env:"ADDRESS"`
 	StoreInterval   int           `env:"STORE_INTERVAL"`

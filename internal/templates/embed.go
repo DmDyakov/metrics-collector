@@ -1,3 +1,4 @@
+// Package templates содержит встроенные шаблоны HTML.
 package templates
 
 import "embed"

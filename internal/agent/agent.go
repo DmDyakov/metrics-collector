@@ -1,3 +1,4 @@
+// Package agent реализует агента сбора метрик
 package agent
 
 import (
@@ -13,7 +14,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// Agent manages metrics collection and reporting to the server.
 type Agent struct {
 	cfg      *config.AgentConfig
 	logger   *zap.Logger

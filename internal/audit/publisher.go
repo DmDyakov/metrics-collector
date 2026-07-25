@@ -1,3 +1,4 @@
+// Package audit реализует аудит
 package audit
 
 import (
@@ -19,7 +20,6 @@ type Event struct {
 	IPAddress string   `json:"ip_address"`
 }
 
-// Publisher receives audit events and sends them to all subscribers.
 type Publisher struct {
 	events   chan Event
 	handlers []func(Event)
@@ -43,13 +43,15 @@ func NewPublisher(auditFile, auditURL string, logger *zap.Logger) (*Publisher, e
 			return nil, fmt.Errorf("audit file: %w", err)
 		}
 		handlers = append(handlers, func(e Event) {
-			json.NewEncoder(file).Encode(e)
+			if err := json.NewEncoder(file).Encode(e); err != nil {
+				logger.Error("failed to encode audit event to file", zap.Error(err))
+			}
 		})
 		logger.Info("Audit publisher: file writer enabled", zap.String("path", auditFile))
 	}
 
 	if auditURL != "" {
-		handlers = append(handlers, newHTTPHandler(auditURL))
+		handlers = append(handlers, newHTTPHandler(auditURL, logger))
 		logger.Info("Audit publisher: HTTP sender enabled", zap.String("url", auditURL))
 	}
 
@@ -106,16 +108,27 @@ func (p *Publisher) Notify(event Event) {
 	}
 }
 
-func newHTTPHandler(url string) func(Event) {
+func newHTTPHandler(url string, logger *zap.Logger) func(Event) {
 	client := &http.Client{Timeout: 5 * time.Second}
 	return func(e Event) {
 		var buf bytes.Buffer
-		json.NewEncoder(&buf).Encode(e)
-		req, _ := http.NewRequest(http.MethodPost, url, &buf)
+		if err := json.NewEncoder(&buf).Encode(e); err != nil {
+			logger.Error("failed to encode audit event for HTTP", zap.Error(err))
+			return
+		}
+
+		req, err := http.NewRequest(http.MethodPost, url, &buf)
+		if err != nil {
+			logger.Error("failed to create HTTP request for audit", zap.Error(err))
+			return
+		}
+
 		req.Header.Set("Content-Type", "application/json")
 		resp, err := client.Do(req)
-		if err == nil {
-			resp.Body.Close()
+		if err != nil {
+			logger.Error("failed to send audit event via HTTP", zap.Error(err))
+			return
 		}
+		defer resp.Body.Close()
 	}
 }

@@ -27,3 +27,5 @@ vendor/
 
 store.json
 audit.log
+
+bin/

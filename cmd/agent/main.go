@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"metrics-collector/internal/agent"
 	"metrics-collector/internal/config"
 	"metrics-collector/internal/logger"
+	"metrics-collector/pkg/buildinfo"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,14 +16,20 @@ import (
 )
 
 func main() {
+	buildinfo.Print()
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	logger, err := logger.NewZapLogger()
 	if err != nil {
-		log.Fatalf("Failed to create agent logger: %v", err)
+		log.Fatalf("failed to create logger: %v", err)
 	}
-	defer logger.Sync()
+	defer func() {
+		if err := logger.Sync(); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to sync logger: %v\n", err)
+		}
+	}()
 
 	cfg, err := config.NewAgentConfig(os.Args[1:])
 	if err != nil {

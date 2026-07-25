@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -11,11 +12,14 @@ import (
 	"metrics-collector/internal/config"
 	"metrics-collector/internal/logger"
 	"metrics-collector/internal/pprof"
+	"metrics-collector/pkg/buildinfo"
 
 	"go.uber.org/zap"
 )
 
 func main() {
+	buildinfo.Print()
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -23,7 +27,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to create logger: %v", err)
 	}
-	defer logger.Sync()
+	defer func() {
+		if err := logger.Sync(); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to sync logger: %v\n", err)
+		}
+	}()
 
 	cfg, err := config.NewServerConfig(os.Args[1:])
 	if err != nil {
@@ -31,7 +39,7 @@ func main() {
 	}
 
 	if cfg == nil {
-		logger.Fatal("Config is nil")
+		logger.Fatal("config is nil")
 	}
 
 	app, err := app.New(cfg, logger)

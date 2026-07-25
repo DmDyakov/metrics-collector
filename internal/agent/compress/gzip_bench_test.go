@@ -10,7 +10,7 @@ func BenchmarkCompress(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		gz.Compress(data)
+		_, _ = gz.Compress(data)
 	}
 }
 
@@ -21,6 +21,6 @@ func BenchmarkDecompress(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		gz.Decompress(compressed)
+		_, _ = gz.Decompress(compressed)
 	}
 }
