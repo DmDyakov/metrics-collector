@@ -44,12 +44,9 @@ func TestNewAgentConfig(t *testing.T) {
 	})
 
 	t.Run("env overrides defaults", func(t *testing.T) {
-		os.Setenv("ADDRESS", "localhost:7070")
-		os.Setenv("POLL_INTERVAL", "7")
-		os.Setenv("RATE_LIMIT", "8")
-		defer os.Unsetenv("ADDRESS")
-		defer os.Unsetenv("POLL_INTERVAL")
-		defer os.Unsetenv("RATE_LIMIT")
+		t.Setenv("ADDRESS", "localhost:7070")
+		t.Setenv("POLL_INTERVAL", "7")
+		t.Setenv("RATE_LIMIT", "8")
 
 		cfg, err := NewAgentConfig([]string{})
 		require.NoError(t, err)
@@ -60,10 +57,8 @@ func TestNewAgentConfig(t *testing.T) {
 	})
 
 	t.Run("flags override env", func(t *testing.T) {
-		os.Setenv("ADDRESS", "localhost:7070")
-		os.Setenv("POLL_INTERVAL", "7")
-		defer os.Unsetenv("ADDRESS")
-		defer os.Unsetenv("POLL_INTERVAL")
+		t.Setenv("ADDRESS", "localhost:7070")
+		t.Setenv("POLL_INTERVAL", "7")
 
 		cfg, err := NewAgentConfig([]string{
 			"-a", "localhost:9090",
@@ -99,8 +94,7 @@ func TestNewAgentConfig(t *testing.T) {
 		require.NoError(t, err)
 		tmpFile.Close()
 
-		os.Setenv("ADDRESS", "localhost:7070")
-		defer os.Unsetenv("ADDRESS")
+		t.Setenv("ADDRESS", "localhost:7070")
 
 		cfg, err := NewAgentConfig([]string{"-c", tmpFile.Name()})
 		require.NoError(t, err)
@@ -132,8 +126,7 @@ func TestNewAgentConfig(t *testing.T) {
 		require.NoError(t, err)
 		tmpFile.Close()
 
-		os.Setenv("POLL_INTERVAL", "7")
-		defer os.Unsetenv("POLL_INTERVAL")
+		t.Setenv("POLL_INTERVAL", "7")
 
 		cfg, err := NewAgentConfig([]string{"-c", tmpFile.Name(), "-a", "localhost:9090"})
 		require.NoError(t, err)
