@@ -28,6 +28,7 @@ type App struct {
 	server         *http.Server
 	auditPublisher *audit.Publisher
 	backupWorker   *worker.BackupWorker
+	backupRepo     worker.BackupRepository
 }
 
 // New создаёт новый App.
@@ -88,6 +89,7 @@ func New(cfg *config.ServerConfig, logger *zap.Logger) (*App, error) {
 		server:         server,
 		auditPublisher: auditPublisher,
 		backupWorker:   backupWorker,
+		backupRepo:     repo,
 	}, nil
 }
 
@@ -130,6 +132,10 @@ func (a *App) shutdown() error {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), a.cfg.ShutdownTimeout)
 	defer cancel()
+
+	if err := a.backupRepo.BackupMetrics(shutdownCtx); err != nil {
+		a.logger.Error("failed to backup metrics during shutdown", zap.Error(err))
+	}
 
 	if err := a.server.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("graceful shutdown failed: %w", err)
