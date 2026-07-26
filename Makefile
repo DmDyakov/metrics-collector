@@ -75,3 +75,19 @@ clean:
 
 .PHONY: all
 all: fmt lint test-coverage build-all
+
+.PHONY: genkeys test-genkeys all-genkeys
+KEY_SIZE := 8192
+
+genkeys:
+	mkdir -p keys
+	openssl genrsa -traditional -out keys/private.pem $(KEY_SIZE)
+	openssl rsa -in keys/private.pem -pubout -out keys/public.pem
+
+test-genkeys:
+	for dir in internal/agent/client/testdata internal/middleware/testdata pkg/encryptor/testdata; do \
+		openssl genrsa -traditional -out $$dir/private.pem $(KEY_SIZE); \
+		openssl rsa -in $$dir/private.pem -pubout -out $$dir/public.pem; \
+	done
+
+all-genkeys: test-keys keys
