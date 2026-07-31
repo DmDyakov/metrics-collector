@@ -61,19 +61,15 @@ func New(cfg *config.ServerConfig, logger *zap.Logger) (*App, error) {
 
 	signer, err := signer.New(cfg.SecretKey)
 	if err != nil {
-		logger.Error(err.Error())
+		return nil, fmt.Errorf("failed to initialize signer: %w", err)
 	}
 
-	encryptor, err := encryptor.New("", cfg.PrivateCryptoKey)
+	enc, err := encryptor.New("", cfg.PrivateCryptoKey)
 	if err != nil {
-		logger.Error("failed to create encryptor", zap.Error(err))
-	} else if encryptor != nil {
-		logger.Info("encryptor created", zap.String("key_path", cfg.PrivateCryptoKey))
-	} else {
-		logger.Warn("encryptor is nil — encryption disabled")
+		return nil, fmt.Errorf("failed to create encryptor: %w", err)
 	}
 
-	r := registerRoutes(healthHandler, metricsHandler, auditPublisher, signer, encryptor, logger, cfg)
+	r := registerRoutes(healthHandler, metricsHandler, auditPublisher, signer, enc, logger, cfg)
 
 	server := &http.Server{
 		Addr:         cfg.ServerBaseURL,

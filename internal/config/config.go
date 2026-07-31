@@ -7,7 +7,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"time"
 
@@ -70,7 +69,7 @@ func NewAgentConfig(args []string) (*AgentConfig, error) {
 	crypto := fs.String("crypto-key", "", "path to public key")
 
 	if err := fs.Parse(args); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse flags: %w", err)
 	}
 
 	cfg := &AgentConfig{
@@ -86,10 +85,16 @@ func NewAgentConfig(args []string) (*AgentConfig, error) {
 	if configPath == "" {
 		configPath = os.Getenv("CONFIG")
 	}
-	loadJSONFile(configPath, cfg)
+
+	if err := loadJSONFile(configPath, cfg); err != nil {
+		return nil, fmt.Errorf("failed to load JSON config: %w", err)
+	}
 
 	// 2. Env (средний)
-	loadDotEnv()
+	if err := loadDotEnv(); err != nil {
+		return nil, fmt.Errorf("failed to load .env file: %w", err)
+	}
+
 	if err := env.Parse(cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse env: %w", err)
 	}
@@ -151,9 +156,8 @@ func NewServerConfig(args []string) (*ServerConfig, error) {
 	auditURL := fs.String("audit-url", "", "audit url")
 	crypto := fs.String("crypto-key", "", "path to private key")
 
-	loadDotEnv()
 	if err := fs.Parse(args); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse flags: %w", err)
 	}
 
 	cfg := &ServerConfig{
@@ -174,9 +178,16 @@ func NewServerConfig(args []string) (*ServerConfig, error) {
 	if configPath == "" {
 		configPath = os.Getenv("CONFIG")
 	}
-	loadJSONFile(configPath, cfg)
+
+	if err := loadJSONFile(configPath, cfg); err != nil {
+		return nil, fmt.Errorf("failed to load JSON config: %w", err)
+	}
 
 	// 2. Env
+	if err := loadDotEnv(); err != nil {
+		return nil, fmt.Errorf("failed to load .env file: %w", err)
+	}
+
 	if err := env.Parse(cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse env: %w", err)
 	}
@@ -219,22 +230,23 @@ func NewServerConfig(args []string) (*ServerConfig, error) {
 	return cfg, nil
 }
 
-func loadJSONFile(path string, v interface{}) {
+func loadJSONFile(path string, v interface{}) error {
 	if path == "" {
-		return
+		return nil
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		log.Printf("Warning: could not read config file %s: %v", path, err)
-		return
+		return fmt.Errorf("could not read config file %s: %w", path, err)
 	}
 	if err := json.Unmarshal(data, v); err != nil {
-		log.Printf("Warning: could not parse config file %s: %v", path, err)
+		return fmt.Errorf("could not parse config file %s: %w", path, err)
 	}
+	return nil
 }
 
-func loadDotEnv() {
+func loadDotEnv() error {
 	if err := godotenv.Load(); err != nil && !errors.Is(err, os.ErrNotExist) {
-		log.Printf("Warning: could not load .env file: %v", err)
+		return fmt.Errorf("could not load .env file: %w", err)
 	}
+	return nil
 }
