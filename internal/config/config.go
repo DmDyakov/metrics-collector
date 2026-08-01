@@ -157,7 +157,7 @@ func NewServerConfig(args []string) (*ServerConfig, error) {
 	restore := fs.Bool("r", defaultRestore, "restore")
 	dsn := fs.String("d", defaultDatabaseDSN, "database DSN")
 	key := fs.String("k", defaultSecretKey, "secret key")
-	reqTimeout := fs.Duration("t", defaultRequestTimeout, "request timeout")
+	reqTimeout := fs.Duration("rt", defaultRequestTimeout, "request timeout")
 	shutTimeout := fs.Duration("s", defaultShutdownTimeout, "shutdown timeout")
 	auditFile := fs.String("audit-file", "", "audit file")
 	auditURL := fs.String("audit-url", "", "audit url")
@@ -216,7 +216,7 @@ func NewServerConfig(args []string) (*ServerConfig, error) {
 			cfg.DatabaseDSN = *dsn
 		case "k":
 			cfg.SecretKey = *key
-		case "t":
+		case "rt":
 			cfg.RequestTimeout = *reqTimeout
 		case "s":
 			cfg.ShutdownTimeout = *shutTimeout
