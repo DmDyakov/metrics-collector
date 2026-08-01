@@ -18,7 +18,7 @@ import (
 )
 
 func TestClient_ToDto(t *testing.T) {
-	c := New("localhost:8080", zap.NewNop(), nil, nil, compress.NewGzip())
+	c := New("localhost:8080", "100.100.100.100", zap.NewNop(), nil, nil, compress.NewGzip())
 
 	t.Run("converts metrics to DTO", func(t *testing.T) {
 		metrics := map[string]float64{
@@ -37,7 +37,7 @@ func TestClient_ToDto(t *testing.T) {
 }
 
 func TestClient_SendMetrics(t *testing.T) {
-	c := New("localhost:8080", zap.NewNop(), nil, nil, compress.NewGzip())
+	c := New("localhost:8080", "100.100.100.100", zap.NewNop(), nil, nil, compress.NewGzip())
 
 	t.Run("skips empty batch", func(t *testing.T) {
 		err := c.SendMetrics(context.Background(), map[string]float64{})

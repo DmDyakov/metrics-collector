@@ -69,7 +69,16 @@ func New(cfg *config.ServerConfig, logger *zap.Logger) (*App, error) {
 		return nil, fmt.Errorf("failed to create encryptor: %w", err)
 	}
 
-	r := registerRoutes(healthHandler, metricsHandler, auditPublisher, signer, enc, logger, cfg)
+	r := registerRoutes(
+		healthHandler,
+		metricsHandler,
+		auditPublisher,
+		signer,
+		enc,
+		logger,
+		cfg.RequestTimeout,
+		cfg.TrustedSubnet,
+	)
 
 	server := &http.Server{
 		Addr:         cfg.ServerBaseURL,
