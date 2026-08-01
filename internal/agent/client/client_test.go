@@ -8,17 +8,19 @@ import (
 	"syscall"
 	"testing"
 
-	"metrics-collector/internal/agent/compress"
 	models "metrics-collector/internal/model"
+	"metrics-collector/pkg/compress"
+	"metrics-collector/pkg/encryptor"
+	"metrics-collector/pkg/signer"
 
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )
 
 func TestClient_ToDto(t *testing.T) {
-	t.Run("converts metrics to DTO", func(t *testing.T) {
-		c := New("localhost:8080", "", zap.NewNop(), compress.NewGzip())
+	c := New("localhost:8080", zap.NewNop(), nil, nil, compress.NewGzip())
 
+	t.Run("converts metrics to DTO", func(t *testing.T) {
 		metrics := map[string]float64{
 			"cpu":            42.5,
 			models.PollCount: 10,
@@ -29,15 +31,15 @@ func TestClient_ToDto(t *testing.T) {
 	})
 
 	t.Run("empty metrics returns empty slice", func(t *testing.T) {
-		c := New("localhost:8080", "", zap.NewNop(), compress.NewGzip())
 		dto := c.toDto(map[string]float64{})
 		assert.Empty(t, dto)
 	})
 }
 
 func TestClient_SendMetrics(t *testing.T) {
+	c := New("localhost:8080", zap.NewNop(), nil, nil, compress.NewGzip())
+
 	t.Run("skips empty batch", func(t *testing.T) {
-		c := New("localhost:8080", "", zap.NewNop(), compress.NewGzip())
 		err := c.SendMetrics(context.Background(), map[string]float64{})
 		assert.NoError(t, err)
 	})
@@ -69,11 +71,29 @@ func TestClient_IsRetriable(t *testing.T) {
 }
 
 func TestClient_CreateSignature(t *testing.T) {
-	t.Run("creates HMAC signature", func(t *testing.T) {
-		c := New("localhost:8080", "secret", zap.NewNop(), compress.NewGzip())
+	s, _ := signer.New("secret")
 
-		sig := c.createSignature([]byte("test"))
+	t.Run("creates HMAC signature", func(t *testing.T) {
+		sig := s.CreateSignature([]byte("test"))
 		assert.NotEmpty(t, sig)
 		assert.Len(t, sig, 32)
+	})
+}
+
+func TestClient_Encryption(t *testing.T) {
+	t.Run("encrypts and decrypts data", func(t *testing.T) {
+		enc, err := encryptor.New("testdata/public.pem", "testdata/private.pem")
+		if err != nil {
+			t.Skip("test keys not found, skipping encryption test")
+		}
+
+		data := []byte("test data")
+		encrypted, err := enc.Encrypt(data)
+		assert.NoError(t, err)
+		assert.NotEqual(t, data, encrypted)
+
+		decrypted, err := enc.Decrypt(encrypted)
+		assert.NoError(t, err)
+		assert.Equal(t, data, decrypted)
 	})
 }

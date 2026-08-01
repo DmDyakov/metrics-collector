@@ -29,3 +29,10 @@ store.json
 audit.log
 
 bin/
+
+# Ключи шифрования
+keys/
+
+# JSON-конфиги
+agent.json
+server.json

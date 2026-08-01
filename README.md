@@ -66,6 +66,10 @@ make build-all
 # Запуск собранных бинарников
 ./bin/server
 ./bin/agent
+./bin/server -a :8080 -k "secret" -crypto-key=./keys/private.pem
+./bin/agent -a :8080 -k "secret" -crypto-key=./keys/public.pem
+./bin/server -c=./server.json
+./bin/agent -c=./agent.json
 ```
 
 ### Тестирование
@@ -108,4 +112,11 @@ make clean
 
 ```bash
 make all
+```
+
+### Сгенерировать ключи
+```bash
+make genkeys          # сгенерировать рабочие ключи
+make test-genkeys     # сгенерировать тестовые ключи
+make all-genkeys      # сгенерировать все ключи
 ```

@@ -5,10 +5,12 @@ import (
 	"context"
 
 	"metrics-collector/internal/agent/client"
-	"metrics-collector/internal/agent/compress"
 	"metrics-collector/internal/agent/store"
 	"metrics-collector/internal/agent/worker"
 	"metrics-collector/internal/config"
+	"metrics-collector/pkg/compress"
+	"metrics-collector/pkg/encryptor"
+	"metrics-collector/pkg/signer"
 
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -27,7 +29,15 @@ type Agent struct {
 func NewAgent(cfg *config.AgentConfig, l *zap.Logger) *Agent {
 	store := store.New()
 	gzip := compress.NewGzip()
-	client := client.New(cfg.ServerBaseURL, cfg.SecretKey, l, gzip)
+	signer, err := signer.New(cfg.SecretKey)
+	if err != nil {
+		l.Error(err.Error())
+	}
+	encryptor, err := encryptor.New(cfg.PublicCryptoKey, "")
+	if err != nil {
+		l.Fatal("failed to load public key", zap.Error(err))
+	}
+	client := client.New(cfg.ServerBaseURL, l, signer, encryptor, gzip)
 	poller := worker.NewPoller(store, l, cfg.PollInterval)
 	reporter := worker.NewReporter(store, client, l, cfg.RateLimit, cfg.ReportInterval)
 

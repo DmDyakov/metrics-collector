@@ -10,9 +10,9 @@ import (
 
 	"metrics-collector/internal/app"
 	"metrics-collector/internal/config"
-	"metrics-collector/internal/logger"
-	"metrics-collector/internal/pprof"
 	"metrics-collector/pkg/buildinfo"
+	"metrics-collector/pkg/logger"
+	"metrics-collector/pkg/pprof"
 
 	"go.uber.org/zap"
 )
@@ -20,7 +20,7 @@ import (
 func main() {
 	buildinfo.Print()
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
 	defer stop()
 
 	logger, err := logger.NewZapLogger()

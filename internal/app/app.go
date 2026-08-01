@@ -14,6 +14,8 @@ import (
 	"metrics-collector/internal/repository"
 	"metrics-collector/internal/service"
 	"metrics-collector/internal/worker"
+	"metrics-collector/pkg/encryptor"
+	"metrics-collector/pkg/signer"
 
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -26,6 +28,7 @@ type App struct {
 	server         *http.Server
 	auditPublisher *audit.Publisher
 	backupWorker   *worker.BackupWorker
+	backupRepo     worker.BackupRepository
 }
 
 // New создаёт новый App.
@@ -56,7 +59,17 @@ func New(cfg *config.ServerConfig, logger *zap.Logger) (*App, error) {
 		return nil, fmt.Errorf("failed to create audit publisher: %w", err)
 	}
 
-	r := registerRoutes(healthHandler, metricsHandler, auditPublisher, logger, cfg)
+	signer, err := signer.New(cfg.SecretKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize signer: %w", err)
+	}
+
+	enc, err := encryptor.New("", cfg.PrivateCryptoKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create encryptor: %w", err)
+	}
+
+	r := registerRoutes(healthHandler, metricsHandler, auditPublisher, signer, enc, logger, cfg)
 
 	server := &http.Server{
 		Addr:         cfg.ServerBaseURL,
@@ -72,6 +85,7 @@ func New(cfg *config.ServerConfig, logger *zap.Logger) (*App, error) {
 		server:         server,
 		auditPublisher: auditPublisher,
 		backupWorker:   backupWorker,
+		backupRepo:     repo,
 	}, nil
 }
 
@@ -114,6 +128,10 @@ func (a *App) shutdown() error {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), a.cfg.ShutdownTimeout)
 	defer cancel()
+
+	if err := a.backupRepo.BackupMetrics(shutdownCtx); err != nil {
+		a.logger.Error("failed to backup metrics during shutdown", zap.Error(err))
+	}
 
 	if err := a.server.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("graceful shutdown failed: %w", err)

@@ -30,27 +30,4 @@ func (e *MetricNotFoundError) Error() string {
 	return fmt.Sprintf("metric %s/%s not found", e.Type, e.Name)
 }
 
-type SignatureError struct {
-	Msg string
-}
-
-func (e *SignatureError) Error() string {
-	return e.Msg
-}
-
 // ================================
-
-type ErrRequestBodyRead struct {
-	Method   string
-	URL      string
-	BodySize int
-	Err      error
-}
-
-func (e *ErrRequestBodyRead) Error() string {
-	return fmt.Sprintf("failed to read request body: method=%s, url=%s, body_size=%d): %v", e.Method, e.URL, e.BodySize, e.Err)
-}
-
-func (e *ErrRequestBodyRead) Unwrap() error {
-	return e.Err
-}
