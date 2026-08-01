@@ -15,6 +15,11 @@ import (
 	"go.uber.org/zap"
 )
 
+//go:generate mockgen -destination=mocks/audit_publisher.go -package=mocks . AuditPublisher
+type AuditPublisher interface {
+	Notify(event audit.Event)
+}
+
 type auditResponseWriter struct {
 	http.ResponseWriter
 	statusCode  int
@@ -37,7 +42,7 @@ func (w *auditResponseWriter) Write(b []byte) (int, error) {
 }
 
 // WithAudit middleware sends audit events after successful metrics processing.
-func WithAudit(logger *zap.Logger, publisher *audit.Publisher) func(next http.Handler) http.Handler {
+func WithAudit(logger *zap.Logger, publisher AuditPublisher) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			body, err := io.ReadAll(r.Body)
