@@ -19,6 +19,7 @@ import (
 
 type Client struct {
 	baseURL    string
+	agentIP    string
 	signer     *signer.Signer
 	encryptor  *encryptor.Encryptor
 	httpClient *http.Client
@@ -28,6 +29,7 @@ type Client struct {
 
 func New(
 	baseURL string,
+	agentIP string,
 	logger *zap.Logger,
 	signer *signer.Signer,
 	encryptor *encryptor.Encryptor,
@@ -35,6 +37,7 @@ func New(
 ) *Client {
 	return &Client{
 		baseURL:   baseURL,
+		agentIP:   agentIP,
 		signer:    signer,
 		encryptor: encryptor,
 		gzip:      gzip,
@@ -97,6 +100,7 @@ func (c *Client) SendMetrics(ctx context.Context, batch map[string]float64) erro
 			req.Header.Set("HashSHA256", hex.EncodeToString(c.signer.CreateSignature(payload)))
 		}
 
+		req.Header.Set("X-Real-IP", c.agentIP)
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Content-Encoding", "gzip")
 		req.Header.Set("Accept-Encoding", "gzip")

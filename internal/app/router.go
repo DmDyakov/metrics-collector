@@ -2,11 +2,11 @@ package app
 
 import (
 	"metrics-collector/internal/audit"
-	"metrics-collector/internal/config"
 	"metrics-collector/internal/handler"
 	"metrics-collector/internal/middleware"
 	"metrics-collector/pkg/encryptor"
 	"metrics-collector/pkg/signer"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
@@ -21,11 +21,12 @@ func registerRoutes(
 	signer *signer.Signer,
 	encryptor *encryptor.Encryptor,
 	logger *zap.Logger,
-	cfg *config.ServerConfig,
+	requestTimeout time.Duration,
+	trustedCIDR string,
 ) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(chimw.StripSlashes)
-	r.Use(middleware.WithTimeout(cfg.RequestTimeout))
+	r.Use(middleware.WithTimeout(requestTimeout))
 	r.Use(middleware.WithLogging(logger))
 
 	r.Use(middleware.WithSignature(logger, signer))
@@ -41,6 +42,8 @@ func registerRoutes(
 	})
 
 	r.Group(func(r chi.Router) {
+		r.Use(middleware.WithTrustedSubnet(trustedCIDR))
+
 		if auditPublisher != nil {
 			r.Use(middleware.WithAudit(logger, auditPublisher))
 		}

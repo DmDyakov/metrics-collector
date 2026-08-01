@@ -21,6 +21,7 @@ type AgentConfig struct {
 	SecretKey       string `env:"KEY" json:"key"`
 	PublicCryptoKey string `env:"CRYPTO_KEY" json:"crypto_key"`
 	RateLimit       int    `env:"RATE_LIMIT" json:"rate_limit"`
+	AgentIP         string `env:"AGENT_IP" json:"agent_ip"`
 }
 
 type ServerConfig struct {
@@ -36,6 +37,7 @@ type ServerConfig struct {
 	AuditFile        string        `env:"AUDIT_FILE" json:"audit_file"`
 	AuditURL         string        `env:"AUDIT_URL" json:"audit_url"`
 	PprofAddr        string        `env:"PPROF_ADDR" json:"pprof_addr"`
+	TrustedSubnet    string        `env:"TRUSTED_SUBNET" json:"trusted_subnet"`
 }
 
 const (
@@ -57,6 +59,7 @@ const (
 // NewAgentConfig creates an agent configuration from CLI arguments and environment variables.
 func NewAgentConfig(args []string) (*AgentConfig, error) {
 	fs := flag.NewFlagSet("agent", flag.ContinueOnError)
+
 	var configPath string
 	fs.StringVar(&configPath, "c", "", "path to JSON config file")
 	fs.StringVar(&configPath, "config", "", "path to JSON config file")
@@ -120,6 +123,9 @@ func NewAgentConfig(args []string) (*AgentConfig, error) {
 	if cfg.ServerBaseURL == "" {
 		return nil, errors.New("server URL can not be empty")
 	}
+	if cfg.AgentIP == "" {
+		return nil, errors.New("agent ip can not be empty")
+	}
 	if cfg.PollInterval <= 0 {
 		return nil, errors.New("poll interval must be positive")
 	}
@@ -140,6 +146,7 @@ func NewAgentConfig(args []string) (*AgentConfig, error) {
 
 func NewServerConfig(args []string) (*ServerConfig, error) {
 	fs := flag.NewFlagSet("server", flag.ContinueOnError)
+
 	var configPath string
 	fs.StringVar(&configPath, "c", "", "path to JSON config file")
 	fs.StringVar(&configPath, "config", "", "path to JSON config file")
@@ -150,11 +157,12 @@ func NewServerConfig(args []string) (*ServerConfig, error) {
 	restore := fs.Bool("r", defaultRestore, "restore")
 	dsn := fs.String("d", defaultDatabaseDSN, "database DSN")
 	key := fs.String("k", defaultSecretKey, "secret key")
-	reqTimeout := fs.Duration("t", defaultRequestTimeout, "request timeout")
+	reqTimeout := fs.Duration("rt", defaultRequestTimeout, "request timeout")
 	shutTimeout := fs.Duration("s", defaultShutdownTimeout, "shutdown timeout")
 	auditFile := fs.String("audit-file", "", "audit file")
 	auditURL := fs.String("audit-url", "", "audit url")
 	crypto := fs.String("crypto-key", "", "path to private key")
+	trustedSubnet := fs.String("t", "", "network subnet in CIDR notation (e.g. 192.168.1.0/24)")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, fmt.Errorf("failed to parse flags: %w", err)
@@ -172,6 +180,7 @@ func NewServerConfig(args []string) (*ServerConfig, error) {
 		AuditFile:        *auditFile,
 		AuditURL:         *auditURL,
 		PrivateCryptoKey: *crypto,
+		TrustedSubnet:    *trustedSubnet,
 	}
 
 	// 1. JSON
@@ -207,7 +216,7 @@ func NewServerConfig(args []string) (*ServerConfig, error) {
 			cfg.DatabaseDSN = *dsn
 		case "k":
 			cfg.SecretKey = *key
-		case "t":
+		case "rt":
 			cfg.RequestTimeout = *reqTimeout
 		case "s":
 			cfg.ShutdownTimeout = *shutTimeout

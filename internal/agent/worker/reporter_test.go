@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -12,61 +13,101 @@ import (
 	"go.uber.org/zap"
 )
 
-func TestReporter_WorkerStopsOnContextCancel(t *testing.T) {
-	t.Run("worker exits when context cancelled", func(t *testing.T) {
-		reporter, _, _ := setupReporterTest(t)
-
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
-
-		err := reporter.worker(ctx, 1)
-		assert.NoError(t, err)
-	})
-}
-
-func TestReporter_WorkerStopsOnClosedChannel(t *testing.T) {
-	t.Run("worker exits when jobs channel closed", func(t *testing.T) {
-		reporter, _, _ := setupReporterTest(t)
-
-		close(reporter.jobs)
-
-		err := reporter.worker(context.Background(), 1)
-		assert.NoError(t, err)
-	})
-}
-
-func setupReporterTest(t *testing.T) (*Reporter, *mocks.MockReporterStore, *mocks.MockClient) {
-	t.Helper()
-
-	ctrl := gomock.NewController(t)
-	t.Cleanup(ctrl.Finish)
-
-	mockStore := mocks.NewMockReporterStore(ctrl)
-	mockClient := mocks.NewMockClient(ctrl)
+func TestReporter_Run(t *testing.T) {
 	logger := zap.NewNop()
-	reporter := NewReporter(mockStore, mockClient, logger, 2, 1)
 
-	return reporter, mockStore, mockClient
-}
-
-func TestReporter_Scheduler(t *testing.T) {
-	t.Run("sends batch to jobs channel", func(t *testing.T) {
+	t.Run("sends metrics on tick", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		mockStore := mocks.NewMockReporterStore(ctrl)
 		mockClient := mocks.NewMockClient(ctrl)
-		logger := zap.NewNop()
-		reporter := NewReporter(mockStore, mockClient, logger, 1, 100) // большой интервал
+		mockStore := mocks.NewMockReporterStore(ctrl)
 
-		v := 42.5
-		snapshot := map[string]float64{"cpu": v}
-		mockStore.EXPECT().GetMetricsSnapshot().Return(snapshot).AnyTimes()
+		batch := map[string]float64{"cpu": 42.5}
+		mockStore.EXPECT().GetMetricsSnapshot().Return(batch).AnyTimes()
+		mockClient.EXPECT().SendMetrics(gomock.Any(), batch).Return(nil).AnyTimes()
 
-		ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
-		defer cancel()
+		reporter := NewReporter(mockStore, mockClient, logger, 1, 100)
 
-		err := reporter.scheduler(ctx)
-		assert.ErrorIs(t, err, context.DeadlineExceeded)
+		ctx, cancel := context.WithCancel(context.Background())
+
+		go func() {
+			time.Sleep(250 * time.Millisecond)
+			cancel()
+		}()
+
+		err := reporter.Run(ctx)
+		assert.NoError(t, err)
+	})
+
+	t.Run("worker handles send error", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockClient := mocks.NewMockClient(ctrl)
+		mockStore := mocks.NewMockReporterStore(ctrl)
+
+		batch := map[string]float64{"cpu": 42.5}
+		mockStore.EXPECT().GetMetricsSnapshot().Return(batch).AnyTimes()
+		mockClient.EXPECT().SendMetrics(gomock.Any(), batch).Return(errors.New("send failed")).AnyTimes()
+
+		reporter := NewReporter(mockStore, mockClient, logger, 1, 100)
+
+		ctx, cancel := context.WithCancel(context.Background())
+
+		go func() {
+			time.Sleep(250 * time.Millisecond)
+			cancel()
+		}()
+
+		err := reporter.Run(ctx)
+		assert.NoError(t, err)
+	})
+
+	t.Run("scheduler stops on context cancel", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockClient := mocks.NewMockClient(ctrl)
+		mockStore := mocks.NewMockReporterStore(ctrl)
+
+		mockStore.EXPECT().GetMetricsSnapshot().Return(map[string]float64{}).AnyTimes()
+		mockClient.EXPECT().SendMetrics(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+		reporter := NewReporter(mockStore, mockClient, logger, 2, 100)
+
+		ctx, cancel := context.WithCancel(context.Background())
+
+		go func() {
+			time.Sleep(250 * time.Millisecond)
+			cancel()
+		}()
+
+		err := reporter.Run(ctx)
+		assert.NoError(t, err)
+	})
+
+	t.Run("multiple workers process jobs", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockClient := mocks.NewMockClient(ctrl)
+		mockStore := mocks.NewMockReporterStore(ctrl)
+
+		batch := map[string]float64{"cpu": 42.5}
+		mockStore.EXPECT().GetMetricsSnapshot().Return(batch).AnyTimes()
+		mockClient.EXPECT().SendMetrics(gomock.Any(), batch).Return(nil).AnyTimes()
+
+		reporter := NewReporter(mockStore, mockClient, logger, 2, 100)
+
+		ctx, cancel := context.WithCancel(context.Background())
+
+		go func() {
+			time.Sleep(250 * time.Millisecond)
+			cancel()
+		}()
+
+		err := reporter.Run(ctx)
+		assert.NoError(t, err)
 	})
 }

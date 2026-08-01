@@ -37,7 +37,7 @@ func NewAgent(cfg *config.AgentConfig, l *zap.Logger) *Agent {
 	if err != nil {
 		l.Fatal("failed to load public key", zap.Error(err))
 	}
-	client := client.New(cfg.ServerBaseURL, l, signer, encryptor, gzip)
+	client := client.New(cfg.ServerBaseURL, cfg.AgentIP, l, signer, encryptor, gzip)
 	poller := worker.NewPoller(store, l, cfg.PollInterval)
 	reporter := worker.NewReporter(store, client, l, cfg.RateLimit, cfg.ReportInterval)
 

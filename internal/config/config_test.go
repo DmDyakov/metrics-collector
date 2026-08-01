@@ -16,8 +16,10 @@ func TestNewAgentConfig(t *testing.T) {
 	os.Unsetenv("CRYPTO_KEY")
 	os.Unsetenv("RATE_LIMIT")
 	os.Unsetenv("CONFIG")
+	os.Unsetenv("AGENT_IP")
 
 	t.Run("default values", func(t *testing.T) {
+		t.Setenv("AGENT_IP", "127.0.0.1")
 		cfg, err := NewAgentConfig([]string{})
 		require.NoError(t, err)
 		assert.Equal(t, defaultServerBaseURL, cfg.ServerBaseURL)
@@ -28,6 +30,7 @@ func TestNewAgentConfig(t *testing.T) {
 	})
 
 	t.Run("flags override defaults", func(t *testing.T) {
+		t.Setenv("AGENT_IP", "127.0.0.1")
 		cfg, err := NewAgentConfig([]string{
 			"-a", "localhost:9090",
 			"-p", "5",
@@ -44,6 +47,7 @@ func TestNewAgentConfig(t *testing.T) {
 	})
 
 	t.Run("env overrides defaults", func(t *testing.T) {
+		t.Setenv("AGENT_IP", "127.0.0.1")
 		t.Setenv("ADDRESS", "localhost:7070")
 		t.Setenv("POLL_INTERVAL", "7")
 		t.Setenv("RATE_LIMIT", "8")
@@ -57,6 +61,7 @@ func TestNewAgentConfig(t *testing.T) {
 	})
 
 	t.Run("flags override env", func(t *testing.T) {
+		t.Setenv("AGENT_IP", "127.0.0.1")
 		t.Setenv("ADDRESS", "localhost:7070")
 		t.Setenv("POLL_INTERVAL", "7")
 
@@ -70,6 +75,7 @@ func TestNewAgentConfig(t *testing.T) {
 	})
 
 	t.Run("json overrides defaults", func(t *testing.T) {
+		t.Setenv("AGENT_IP", "127.0.0.1")
 		tmpFile, err := os.CreateTemp("", "config_*.json")
 		require.NoError(t, err)
 		defer os.Remove(tmpFile.Name())
@@ -86,6 +92,7 @@ func TestNewAgentConfig(t *testing.T) {
 	})
 
 	t.Run("env overrides json", func(t *testing.T) {
+		t.Setenv("AGENT_IP", "127.0.0.1")
 		tmpFile, err := os.CreateTemp("", "config_*.json")
 		require.NoError(t, err)
 		defer os.Remove(tmpFile.Name())
@@ -103,6 +110,7 @@ func TestNewAgentConfig(t *testing.T) {
 	})
 
 	t.Run("flags override json", func(t *testing.T) {
+		t.Setenv("AGENT_IP", "127.0.0.1")
 		tmpFile, err := os.CreateTemp("", "config_*.json")
 		require.NoError(t, err)
 		defer os.Remove(tmpFile.Name())
@@ -118,6 +126,7 @@ func TestNewAgentConfig(t *testing.T) {
 	})
 
 	t.Run("full chain: json -> env -> flag", func(t *testing.T) {
+		t.Setenv("AGENT_IP", "127.0.0.1")
 		tmpFile, err := os.CreateTemp("", "config_*.json")
 		require.NoError(t, err)
 		defer os.Remove(tmpFile.Name())
@@ -136,6 +145,7 @@ func TestNewAgentConfig(t *testing.T) {
 	})
 
 	t.Run("empty server url", func(t *testing.T) {
+		t.Setenv("AGENT_IP", "127.0.0.1")
 		_, err := NewAgentConfig([]string{"-a", ""})
 		assert.Error(t, err)
 	})
