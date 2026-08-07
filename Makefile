@@ -14,10 +14,6 @@ LDFLAGS := -X $(MODULE)/pkg/buildinfo.Version=$(VERSION) \
            -X $(MODULE)/pkg/buildinfo.Date=$(DATE) \
            -X $(MODULE)/pkg/buildinfo.Commit=$(COMMIT)
 
-.PHONY: generate
-generate:
-	go generate ./...
-
 .PHONY: test
 test:
 	go test -race ./...
@@ -107,4 +103,8 @@ proto:
 .PHONY: generate
 generate:
 	go generate ./...
-	$(MAKE) proto
+	protoc \
+		--go_out=. --go_opt=module=$(MODULE) \
+		--go-grpc_out=. --go-grpc_opt=module=$(MODULE) \
+		--go_opt=default_api_level=API_OPAQUE \
+		api/metrics/v1/metrics.proto

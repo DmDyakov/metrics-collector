@@ -48,8 +48,8 @@ func New(cfg *config.AgentConfig, logger *zap.Logger) (*Agent, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to load public key: %w", err)
 		}
-		client = httpclient.New(cfg.ServerBaseURL, cfg.AgentIP, logger, signer, encryptor, gzip)
-		logger.Info("Using HTTP client", zap.String("addr", cfg.ServerBaseURL))
+		client = httpclient.New(cfg.HTTPAddress, cfg.AgentIP, logger, signer, encryptor, gzip)
+		logger.Info("Using HTTP client", zap.String("addr", cfg.HTTPAddress))
 	}
 
 	store := store.New()

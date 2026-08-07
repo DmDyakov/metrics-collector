@@ -32,6 +32,8 @@ type PostgresStorage struct {
 	db DB
 }
 
+//----------------------------------
+
 func (db *DB) ExecContextWithRetry(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	return doWithRetry(ctx, db.logger, func() (sql.Result, error) {
 		return db.ExecContext(ctx, query, args...)
@@ -44,26 +46,32 @@ func (db *DB) QueryContextWithRetry(ctx context.Context, query string, args ...a
 
 //----------------------------------
 
-func NewPostgresStorage(databaseDSN string, logger *zap.Logger) (*PostgresStorage, error) {
+func NewPostgresStorage(databaseDSN string, logger *zap.Logger) (*PostgresStorage, *sql.DB, error) {
 	sqlDB, err := sql.Open("pgx", databaseDSN)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err = sqlDB.PingContext(ctx); err != nil {
-		return nil, err
+		sqlDB.Close()
+		return nil, nil, err
 	}
 
 	if err := runMigrations(sqlDB); err != nil {
-		return nil, fmt.Errorf("migration failed: %w", err)
+		sqlDB.Close()
+		return nil, nil, fmt.Errorf("migration failed: %w", err)
 	}
 
 	return &PostgresStorage{
 		db: DB{sqlDB, logger},
-	}, nil
+	}, sqlDB, nil
+}
+
+func (p *PostgresStorage) Close() error {
+	return p.db.Close()
 }
 
 func (p *PostgresStorage) SaveMetric(ctx context.Context, m models.Metrics) error {

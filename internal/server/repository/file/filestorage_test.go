@@ -1,6 +1,7 @@
 package file
 
 import (
+	"context"
 	"testing"
 
 	models "metrics-collector/internal/server/model"
@@ -10,15 +11,17 @@ import (
 )
 
 func TestFileStorage_SaveAndGetAll(t *testing.T) {
+	ctx := context.Background()
+
 	t.Run("save and retrieve metrics", func(t *testing.T) {
 		tmpFile := t.TempDir() + "/test_metrics.json"
 		fs := NewFileStorage(tmpFile)
 
 		v := 42.5
-		err := fs.SaveMetric(models.Metrics{ID: "cpu", MType: "gauge", Value: &v})
+		err := fs.SaveMetric(ctx, models.Metrics{ID: "cpu", MType: "gauge", Value: &v})
 		require.NoError(t, err)
 
-		metrics, err := fs.GetAll()
+		metrics, err := fs.GetAll(ctx)
 		require.NoError(t, err)
 		assert.Len(t, metrics, 1)
 		assert.Equal(t, "cpu", metrics[0].ID)
@@ -30,7 +33,7 @@ func TestFileStorage_SaveAndGetAll(t *testing.T) {
 
 		v1 := 1.0
 		v2 := 2.0
-		count, err := fs.SaveBatch([]models.Metrics{
+		count, err := fs.SaveBatch(ctx, []models.Metrics{
 			{ID: "m1", MType: "gauge", Value: &v1},
 			{ID: "m2", MType: "gauge", Value: &v2},
 		})

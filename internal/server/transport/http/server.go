@@ -58,7 +58,7 @@ func New(
 	})
 
 	return &http.Server{
-		Addr:         cfg.ServerBaseURL,
+		Addr:         cfg.HTTPAddress,
 		Handler:      r,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,

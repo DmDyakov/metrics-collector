@@ -10,6 +10,9 @@ import (
 	"metrics-collector/internal/config"
 	"metrics-collector/internal/server/audit"
 	"metrics-collector/internal/server/repository"
+	"metrics-collector/internal/server/repository/file"
+	"metrics-collector/internal/server/repository/mem"
+	"metrics-collector/internal/server/repository/postgres"
 	"metrics-collector/internal/server/service"
 	grpcserver "metrics-collector/internal/server/transport/grpc"
 	httpserver "metrics-collector/internal/server/transport/http"
@@ -29,18 +32,34 @@ type App struct {
 	logger         *zap.Logger
 	httpServer     *http.Server
 	grpcServer     *grpc.Server
+	repo           *repository.Repository
 	auditPublisher *audit.Publisher
 	backupWorker   *worker.BackupWorker
-	backupRepo     worker.BackupRepository
 }
 
 // New создаёт новый App.
 func New(cfg *config.ServerConfig, logger *zap.Logger) (*App, error) {
-	repo, err := repository.NewRepository(cfg, logger)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create repository: %w", err)
+	// Хранилища
+	memStorage := mem.NewMemStorage()
+
+	var persistent repository.PersistentStorage
+	if cfg.DatabaseDSN != "" {
+		pg, _, err := postgres.NewPostgresStorage(cfg.DatabaseDSN, logger)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create postgres storage: %w", err)
+		}
+		persistent = pg
+		logger.Info("Storage mode: postgres")
+	} else if cfg.FileStoragePath != "" {
+		persistent = file.NewFileStorage(cfg.FileStoragePath)
+		logger.Info("Storage mode: file")
+	} else {
+		logger.Info("Storage mode: memory only")
 	}
 
+	repo := repository.New(memStorage, persistent, cfg.StoreInterval, logger)
+
+	// Воркеры
 	backupWorker := worker.NewBackupWorker(
 		cfg.Restore,
 		cfg.StoreInterval,
@@ -48,30 +67,34 @@ func New(cfg *config.ServerConfig, logger *zap.Logger) (*App, error) {
 		logger,
 	)
 
+	// Сервисы
 	metricsService := service.NewMetricsService(repo)
 	healthService := service.NewHealthService(repo)
 
+	// HTTP handler'ы
 	metricsHandler, err := handler.NewMetricsHandler(metricsService, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create metrics handler: %w", err)
 	}
 	healthHandler := handler.NewHealthHandler(healthService, logger)
 
+	// Аудит
 	auditPublisher, err := audit.NewPublisher(cfg.AuditFile, cfg.AuditURL, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create audit publisher: %w", err)
 	}
 
+	// Подпись
 	signer, err := signer.New(cfg.SecretKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize signer: %w", err)
 	}
-
 	enc, err := encryptor.New("", cfg.PrivateCryptoKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create encryptor: %w", err)
 	}
 
+	// HTTP сервер
 	httpServer := httpserver.New(
 		cfg,
 		healthHandler,
@@ -82,6 +105,7 @@ func New(cfg *config.ServerConfig, logger *zap.Logger) (*App, error) {
 		logger,
 	)
 
+	// gRPC сервер
 	var grpcServer *grpc.Server
 	if cfg.GRPCAddress != "" {
 		grpcHandler := grpcserver.NewHandler(metricsService, logger)
@@ -96,13 +120,12 @@ func New(cfg *config.ServerConfig, logger *zap.Logger) (*App, error) {
 		logger:         logger,
 		httpServer:     httpServer,
 		grpcServer:     grpcServer,
+		repo:           repo,
 		auditPublisher: auditPublisher,
 		backupWorker:   backupWorker,
-		backupRepo:     repo,
 	}, nil
 }
 
-// Run запускает все серверы и воркеры.
 func (a *App) Run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -125,6 +148,12 @@ func (a *App) Run(ctx context.Context) error {
 			return a.auditPublisher.Run(ctx)
 		})
 	}
+
+	g.Go(func() error {
+		<-ctx.Done()
+		a.repo.Close()
+		return nil
+	})
 
 	if err := g.Wait(); err != nil && !errors.Is(err, context.Canceled) {
 		return err
