@@ -4,6 +4,7 @@ package errs
 import (
 	"errors"
 	"fmt"
+	"metrics-collector/internal/domain/metrics"
 )
 
 var (
@@ -22,7 +23,7 @@ var (
 )
 
 type MetricNotFoundError struct {
-	Type string
+	Type metrics.Type
 	Name string
 }
 

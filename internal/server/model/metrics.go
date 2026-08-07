@@ -1,15 +1,7 @@
 // Package models содержит доменные модели метрик.
 package models
 
-const (
-	Counter = "counter"
-	Gauge   = "gauge"
-)
-
-const (
-	PollCount   = "PoolCount"
-	RandomValue = "RandomValue"
-)
+import "metrics-collector/internal/domain/metrics"
 
 // NOTE: Не усложняем пример, вводя иерархическую вложенность структур.
 // Органичиваясь плоской моделью.
@@ -21,9 +13,9 @@ const (
 //
 // generate:reset
 type Metrics struct {
-	ID    string   `json:"id"`
-	MType string   `json:"type"`
-	Delta *int64   `json:"delta,omitempty"`
-	Value *float64 `json:"value,omitempty"`
-	Hash  string   `json:"hash,omitempty"`
+	ID    string       `json:"id"`
+	MType metrics.Type `json:"type"`
+	Delta *int64       `json:"delta,omitempty"`
+	Value *float64     `json:"value,omitempty"`
+	Hash  string       `json:"hash,omitempty"`
 }

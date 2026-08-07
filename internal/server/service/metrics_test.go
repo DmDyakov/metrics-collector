@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"metrics-collector/internal/domain/metrics"
 	"metrics-collector/internal/server/errs"
 	models "metrics-collector/internal/server/model"
 	"metrics-collector/internal/server/service/mocks"
@@ -26,7 +27,7 @@ func TestService_UpdateMetric(t *testing.T) {
 		inputDelta := int64(10)
 		input := models.Metrics{
 			ID:    "TestCount",
-			MType: models.Counter,
+			MType: metrics.Counter,
 			Delta: &inputDelta,
 		}
 
@@ -58,21 +59,21 @@ func TestService_UpdateMetric(t *testing.T) {
 		inputDelta := int64(10)
 		input := models.Metrics{
 			ID:    "TestCount",
-			MType: models.Counter,
+			MType: metrics.Counter,
 			Delta: &inputDelta,
 		}
 
 		outputDelta := int64(3)
 		existing := models.Metrics{
 			ID:    "TestCount",
-			MType: models.Counter,
+			MType: metrics.Counter,
 			Delta: &outputDelta,
 		}
 
 		sumDelta := *input.Delta + *existing.Delta
 		processed := models.Metrics{
 			ID:    "TestCount",
-			MType: models.Counter,
+			MType: metrics.Counter,
 			Delta: &sumDelta,
 		}
 
@@ -103,7 +104,7 @@ func TestService_UpdateMetric(t *testing.T) {
 		inputValue := float64(2.5)
 		input := models.Metrics{
 			ID:    "TestGauge",
-			MType: models.Gauge,
+			MType: metrics.Gauge,
 			Value: &inputValue,
 		}
 
@@ -126,7 +127,7 @@ func TestService_UpdateMetric(t *testing.T) {
 		mockRepo := mocks.NewMockMetricsRepository(ctrl)
 		svc := NewMetricsService(mockRepo)
 
-		input := models.Metrics{ID: "", MType: models.Gauge}
+		input := models.Metrics{ID: "", MType: metrics.Gauge}
 
 		_, err := svc.UpdateMetric(ctx, input)
 		require.Error(t, err)
@@ -155,7 +156,7 @@ func TestService_UpdateMetric(t *testing.T) {
 		mockRepo := mocks.NewMockMetricsRepository(ctrl)
 		svc := NewMetricsService(mockRepo)
 
-		input := models.Metrics{ID: "test", MType: models.Gauge, Value: nil}
+		input := models.Metrics{ID: "test", MType: metrics.Gauge, Value: nil}
 
 		_, err := svc.UpdateMetric(ctx, input)
 		require.Error(t, err)
@@ -170,7 +171,7 @@ func TestService_UpdateMetric(t *testing.T) {
 		mockRepo := mocks.NewMockMetricsRepository(ctrl)
 		svc := NewMetricsService(mockRepo)
 
-		input := models.Metrics{ID: "test", MType: models.Counter, Delta: nil}
+		input := models.Metrics{ID: "test", MType: metrics.Counter, Delta: nil}
 
 		_, err := svc.UpdateMetric(ctx, input)
 		require.Error(t, err)
@@ -186,7 +187,7 @@ func TestService_UpdateMetric(t *testing.T) {
 		svc := NewMetricsService(mockRepo)
 
 		delta := int64(10)
-		input := models.Metrics{ID: "test", MType: models.Counter, Delta: &delta}
+		input := models.Metrics{ID: "test", MType: metrics.Counter, Delta: &delta}
 
 		mockRepo.EXPECT().
 			GetMetric("test").
@@ -211,11 +212,11 @@ func TestService_GetMetric(t *testing.T) {
 		svc := NewMetricsService(mockRepo)
 
 		value := 42.5
-		existing := &models.Metrics{ID: "test", MType: models.Gauge, Value: &value}
+		existing := &models.Metrics{ID: "test", MType: metrics.Gauge, Value: &value}
 
 		mockRepo.EXPECT().GetMetric("test").Return(existing, true)
 
-		input := models.Metrics{ID: "test", MType: models.Gauge}
+		input := models.Metrics{ID: "test", MType: metrics.Gauge}
 		result, err := svc.GetMetric(input)
 
 		require.NoError(t, err)
@@ -231,7 +232,7 @@ func TestService_GetMetric(t *testing.T) {
 
 		mockRepo.EXPECT().GetMetric("missing").Return(nil, false)
 
-		input := models.Metrics{ID: "missing", MType: models.Gauge}
+		input := models.Metrics{ID: "missing", MType: metrics.Gauge}
 		_, err := svc.GetMetric(input)
 
 		var notFound *errs.MetricNotFoundError
@@ -245,7 +246,7 @@ func TestService_GetMetric(t *testing.T) {
 		mockRepo := mocks.NewMockMetricsRepository(ctrl)
 		svc := NewMetricsService(mockRepo)
 
-		_, err := svc.GetMetric(models.Metrics{ID: "", MType: models.Gauge})
+		_, err := svc.GetMetric(models.Metrics{ID: "", MType: metrics.Gauge})
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errs.ErrInvalidRequest)
 	})
@@ -258,11 +259,11 @@ func TestService_GetMetric(t *testing.T) {
 		svc := NewMetricsService(mockRepo)
 
 		value := float64(42.5)
-		existing := &models.Metrics{ID: "test", MType: models.Gauge, Value: &value}
+		existing := &models.Metrics{ID: "test", MType: metrics.Gauge, Value: &value}
 
 		mockRepo.EXPECT().GetMetric("test").Return(existing, true)
 
-		input := models.Metrics{ID: "test", MType: models.Counter}
+		input := models.Metrics{ID: "test", MType: metrics.Counter}
 		_, err := svc.GetMetric(input)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errs.ErrInvalidResponse)
@@ -293,8 +294,8 @@ func TestService_GetAllMetrics(t *testing.T) {
 		v1 := 1.0
 		v2 := 2.0
 		mockRepo.EXPECT().GetAllMetrics().Return(map[string]models.Metrics{
-			"m1": {ID: "m1", MType: models.Gauge, Value: &v1},
-			"m2": {ID: "m2", MType: models.Gauge, Value: &v2},
+			"m1": {ID: "m1", MType: metrics.Gauge, Value: &v1},
+			"m2": {ID: "m2", MType: metrics.Gauge, Value: &v2},
 		})
 
 		result, err := svc.GetAllMetrics()
@@ -316,8 +317,8 @@ func TestService_UpdateMetrics(t *testing.T) {
 		delta1 := int64(10)
 		delta2 := int64(20)
 		batch := []models.Metrics{
-			{ID: "c1", MType: models.Counter, Delta: &delta1},
-			{ID: "c1", MType: models.Counter, Delta: &delta2},
+			{ID: "c1", MType: metrics.Counter, Delta: &delta1},
+			{ID: "c1", MType: metrics.Counter, Delta: &delta2},
 		}
 
 		mockRepo.EXPECT().
@@ -347,7 +348,7 @@ func TestService_UpdateMetrics(t *testing.T) {
 
 		delta := int64(10)
 		batch := []models.Metrics{
-			{ID: "ok", MType: models.Counter, Delta: &delta},
+			{ID: "ok", MType: metrics.Counter, Delta: &delta},
 			{ID: "bad", MType: "invalid", Delta: &delta},
 		}
 

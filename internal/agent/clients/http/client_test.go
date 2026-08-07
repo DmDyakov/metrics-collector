@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	models "metrics-collector/internal/server/model"
+	"metrics-collector/internal/domain/metrics"
 	"metrics-collector/pkg/compress"
 	"metrics-collector/pkg/encryptor"
 	"metrics-collector/pkg/signer"
@@ -27,8 +27,8 @@ func TestClient_ToDto(t *testing.T) {
 
 	t.Run("converts metrics to DTO", func(t *testing.T) {
 		metrics := map[string]float64{
-			"cpu":            42.5,
-			models.PollCount: 10,
+			"cpu":             42.5,
+			metrics.PollCount: 10,
 		}
 
 		dto := c.toDto(metrics)

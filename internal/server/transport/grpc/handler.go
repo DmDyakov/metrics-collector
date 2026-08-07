@@ -3,6 +3,7 @@ package grpc
 import (
 	"context"
 
+	"metrics-collector/internal/domain/metrics"
 	pb "metrics-collector/internal/proto"
 	models "metrics-collector/internal/server/model"
 
@@ -34,7 +35,7 @@ func (h *Handler) UpdateMetrics(ctx context.Context, req *pb.UpdateMetricsReques
 	for _, m := range req.GetMetrics() {
 		metric := models.Metrics{
 			ID:    m.GetId(),
-			MType: m.GetType().String(),
+			MType: metrics.Type(m.GetType().String()),
 		}
 		if m.GetType() == pb.Metric_COUNTER {
 			delta := m.GetDelta()

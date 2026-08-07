@@ -7,6 +7,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"metrics-collector/internal/domain/metrics"
 	"metrics-collector/internal/server/errs"
 	models "metrics-collector/internal/server/model"
 	"time"
@@ -67,7 +68,7 @@ func NewPostgresStorage(databaseDSN string, logger *zap.Logger) (*PostgresStorag
 
 func (p *PostgresStorage) SaveMetric(ctx context.Context, m models.Metrics) error {
 	switch m.MType {
-	case models.Counter:
+	case metrics.Counter:
 		if m.Delta == nil {
 			return errs.ErrMetricDeltaForCountRequired
 		}
@@ -82,7 +83,7 @@ func (p *PostgresStorage) SaveMetric(ctx context.Context, m models.Metrics) erro
 
 		return err
 
-	case models.Gauge:
+	case metrics.Gauge:
 		if m.Value == nil {
 			return errs.ErrMetricValueForGaugeRequired
 		}
@@ -106,7 +107,7 @@ func (p *PostgresStorage) Ping(ctx context.Context) error {
 }
 
 func (p *PostgresStorage) GetAll(ctx context.Context) ([]models.Metrics, error) {
-	var metrics []models.Metrics
+	var batch []models.Metrics
 	rows, err := p.db.QueryContextWithRetry(ctx,
 		`SELECT name, 'counter' as type, value::DOUBLE PRECISION as value FROM counters
 			UNION ALL
@@ -128,24 +129,24 @@ func (p *PostgresStorage) GetAll(ctx context.Context) ([]models.Metrics, error) 
 		}
 
 		switch m.MType {
-		case models.Counter:
+		case metrics.Counter:
 			delta := int64(value)
 			m.Delta = &delta
-		case models.Gauge:
+		case metrics.Gauge:
 			m.Value = &value
 		}
 
-		metrics = append(metrics, m)
+		batch = append(batch, m)
 	}
 
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
-	return metrics, nil
+	return batch, nil
 }
 
-func (p *PostgresStorage) SaveBatch(ctx context.Context, metrics []models.Metrics) (*int, error) {
+func (p *PostgresStorage) SaveBatch(ctx context.Context, batch []models.Metrics) (*int, error) {
 	return doWithRetry(ctx, p.db.logger, func() (*int, error) {
 		savedMetricsCount := 0
 		tx, err := p.db.BeginTx(ctx, nil)
@@ -160,9 +161,9 @@ func (p *PostgresStorage) SaveBatch(ctx context.Context, metrics []models.Metric
 			}
 		}()
 
-		for _, m := range metrics {
+		for _, m := range batch {
 			switch m.MType {
-			case models.Counter:
+			case metrics.Counter:
 				if m.Delta == nil {
 					return nil, errs.ErrMetricDeltaForCountRequired
 				}
@@ -178,7 +179,7 @@ func (p *PostgresStorage) SaveBatch(ctx context.Context, metrics []models.Metric
 				}
 				savedMetricsCount++
 
-			case models.Gauge:
+			case metrics.Gauge:
 				if m.Value == nil {
 					return nil, errs.ErrMetricValueForGaugeRequired
 				}

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"metrics-collector/internal/domain/metrics"
 	"metrics-collector/internal/server/errs"
 	models "metrics-collector/internal/server/model"
 )
@@ -44,10 +45,10 @@ func (svc *MetricsService) UpdateMetric(ctx context.Context, m models.Metrics) (
 		return nil, fmt.Errorf("%w: %w", errs.ErrInvalidRequest, err)
 	}
 
-	if m.MType == models.Counter {
+	if m.MType == metrics.Counter {
 		existing, ok := svc.repo.GetMetric(m.ID)
 		if ok {
-			if existing.MType != models.Counter {
+			if existing.MType != metrics.Counter {
 				return nil, fmt.Errorf("%w: expected %s for id: %s, received %s",
 					errs.ErrMetricTypeMismatch, existing.MType, m.ID, m.MType)
 			}
@@ -77,13 +78,13 @@ func (svc *MetricsService) UpdateMetrics(ctx context.Context, batch []models.Met
 	deduped := svc.deduplicateBatch(batch)
 
 	for idx, input := range deduped {
-		if input.MType == models.Counter {
+		if input.MType == metrics.Counter {
 			existing, ok := svc.repo.GetMetric(input.ID)
 			if !ok {
 				continue
 			}
 
-			if existing.MType != models.Counter {
+			if existing.MType != metrics.Counter {
 				return nil, fmt.Errorf("%w: expected %s for id: %s, received %s",
 					errs.ErrMetricTypeMismatch,
 					existing.MType, input.ID,
@@ -130,10 +131,10 @@ func (svc *MetricsService) deduplicateBatch(batch []models.Metrics) []models.Met
 	aggregated := make(map[string]*models.Metrics)
 
 	for _, m := range batch {
-		key := m.ID + ":" + m.MType
+		key := m.ID + ":" + string(m.MType)
 
 		if existing, ok := aggregated[key]; ok {
-			if m.MType == models.Counter {
+			if m.MType == metrics.Counter {
 				sum := *existing.Delta + *m.Delta
 				existing.Delta = &sum
 			} else {

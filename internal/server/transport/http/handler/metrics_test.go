@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"metrics-collector/internal/domain/metrics"
 	"metrics-collector/internal/server/errs"
 	models "metrics-collector/internal/server/model"
 	"metrics-collector/internal/server/transport/http/handler/mocks"
@@ -73,7 +74,7 @@ func TestMetricsHandler_GetMetricValue(t *testing.T) {
 		h, _ := NewMetricsHandler(mockService, zap.NewNop())
 
 		value := 42.5
-		metric := &models.Metrics{ID: "cpu", MType: models.Gauge, Value: &value}
+		metric := &models.Metrics{ID: "cpu", MType: metrics.Gauge, Value: &value}
 		mockService.EXPECT().GetMetric(gomock.Any()).Return(metric, nil)
 
 		req := httptest.NewRequest(http.MethodGet, "/value/gauge/cpu", nil)
@@ -93,7 +94,7 @@ func TestMetricsHandler_GetMetricValue(t *testing.T) {
 		h, _ := NewMetricsHandler(mockService, zap.NewNop())
 
 		delta := int64(10)
-		metric := &models.Metrics{ID: "hits", MType: models.Counter, Delta: &delta}
+		metric := &models.Metrics{ID: "hits", MType: metrics.Counter, Delta: &delta}
 		mockService.EXPECT().GetMetric(gomock.Any()).Return(metric, nil)
 
 		req := httptest.NewRequest(http.MethodGet, "/value/counter/hits", nil)

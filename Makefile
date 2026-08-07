@@ -95,3 +95,16 @@ test-genkeys:
 	done
 
 all-genkeys: test-keys keys
+
+.PHONY: proto
+proto:
+	protoc \
+		--go_out=. --go_opt=module=$(MODULE) \
+		--go-grpc_out=. --go-grpc_opt=module=$(MODULE) \
+		--go_opt=default_api_level=API_OPAQUE \
+		api/metrics/v1/metrics.proto
+
+.PHONY: generate
+generate:
+	go generate ./...
+	$(MAKE) proto

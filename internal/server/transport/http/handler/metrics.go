@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"metrics-collector/internal/domain/metrics"
 	"metrics-collector/internal/server/errs"
 	models "metrics-collector/internal/server/model"
 	"metrics-collector/internal/server/templates"
@@ -73,7 +74,7 @@ func (h *MetricsHandler) ListMetrics(w http.ResponseWriter, r *http.Request) {
 
 // GetMetricValue возвращает значение метрики.
 func (h *MetricsHandler) GetMetricValue(w http.ResponseWriter, r *http.Request) {
-	metricType := chi.URLParam(r, "type")
+	metricType := metrics.Type(chi.URLParam(r, "type"))
 	metricName := chi.URLParam(r, "name")
 
 	m := models.Metrics{ID: metricName, MType: metricType}
@@ -86,9 +87,9 @@ func (h *MetricsHandler) GetMetricValue(w http.ResponseWriter, r *http.Request) 
 
 	var value string
 	switch metric.MType {
-	case models.Counter:
+	case metrics.Counter:
 		value = strconv.FormatInt(*metric.Delta, 10)
-	case models.Gauge:
+	case metrics.Gauge:
 		value = strconv.FormatFloat(*metric.Value, 'f', -1, 64)
 	}
 
@@ -122,7 +123,7 @@ func (h *MetricsHandler) GetMetric(w http.ResponseWriter, r *http.Request) {
 
 // UpdateMetricByURL обновляет метрику через URL-параметры.
 func (h *MetricsHandler) UpdateMetricByURL(w http.ResponseWriter, r *http.Request) {
-	metricType := chi.URLParam(r, "type")
+	metricType := metrics.Type(chi.URLParam(r, "type"))
 	metricName := chi.URLParam(r, "name")
 	metricValue := chi.URLParam(r, "value")
 
@@ -132,7 +133,7 @@ func (h *MetricsHandler) UpdateMetricByURL(w http.ResponseWriter, r *http.Reques
 	}
 
 	switch metricType {
-	case models.Counter:
+	case metrics.Counter:
 		delta, err := strconv.ParseInt(metricValue, 10, 64)
 		if err != nil {
 			h.handleError(w, fmt.Errorf("%w: %w", errs.ErrInvalidRequest, errs.ErrInvalidCounterValue))
@@ -140,7 +141,7 @@ func (h *MetricsHandler) UpdateMetricByURL(w http.ResponseWriter, r *http.Reques
 		}
 		m.Delta = &delta
 
-	case models.Gauge:
+	case metrics.Gauge:
 		value, err := strconv.ParseFloat(metricValue, 64)
 		if err != nil {
 			h.handleError(w, fmt.Errorf("%w: %w", errs.ErrInvalidRequest, errs.ErrInvalidGaugeValue))
