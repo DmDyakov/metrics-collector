@@ -59,6 +59,10 @@ run-agent:
 lint:
 	golangci-lint run ./...
 
+.PHONY: staticlint
+staticlint:
+	go run ./cmd/staticlint/ ./...
+
 .PHONY: fmt
 fmt:
 	gofmt -s -w .
@@ -74,7 +78,7 @@ clean:
 	rm -rf $(BIN_DIR) $(COVERAGE_FILE)
 
 .PHONY: all
-all: fmt lint test-coverage build-all
+all: fmt lint staticlint test-coverage build-all
 
 .PHONY: genkeys test-genkeys all-genkeys
 KEY_SIZE := 8192

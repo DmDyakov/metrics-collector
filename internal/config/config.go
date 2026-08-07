@@ -22,6 +22,7 @@ type AgentConfig struct {
 	PublicCryptoKey string `env:"CRYPTO_KEY" json:"crypto_key"`
 	RateLimit       int    `env:"RATE_LIMIT" json:"rate_limit"`
 	AgentIP         string `env:"AGENT_IP" json:"agent_ip"`
+	GRPCAddress     string `env:"GRPC_ADDRESS" json:"grpc_address"`
 }
 
 type ServerConfig struct {
@@ -38,6 +39,7 @@ type ServerConfig struct {
 	AuditURL         string        `env:"AUDIT_URL" json:"audit_url"`
 	PprofAddr        string        `env:"PPROF_ADDR" json:"pprof_addr"`
 	TrustedSubnet    string        `env:"TRUSTED_SUBNET" json:"trusted_subnet"`
+	GRPCAddress      string        `env:"GRPC_ADDRESS" json:"grpc_address"`
 }
 
 const (
@@ -70,6 +72,7 @@ func NewAgentConfig(args []string) (*AgentConfig, error) {
 	key := fs.String("k", defaultSecretKey, "secret key")
 	limit := fs.Int("l", defaultRateLimit, "rate limit")
 	crypto := fs.String("crypto-key", "", "path to public key")
+	grpcAddr := fs.String("grpc-addr", ":50051", "gRPC server address")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, fmt.Errorf("failed to parse flags: %w", err)
@@ -82,6 +85,7 @@ func NewAgentConfig(args []string) (*AgentConfig, error) {
 		SecretKey:       *key,
 		RateLimit:       *limit,
 		PublicCryptoKey: *crypto,
+		GRPCAddress:     *grpcAddr,
 	}
 
 	// 1. JSON (низший приоритет)
@@ -117,6 +121,9 @@ func NewAgentConfig(args []string) (*AgentConfig, error) {
 			cfg.RateLimit = *limit
 		case "crypto-key":
 			cfg.PublicCryptoKey = *crypto
+		case "grpc-addr":
+			cfg.GRPCAddress = *grpcAddr
+
 		}
 	})
 
@@ -163,6 +170,7 @@ func NewServerConfig(args []string) (*ServerConfig, error) {
 	auditURL := fs.String("audit-url", "", "audit url")
 	crypto := fs.String("crypto-key", "", "path to private key")
 	trustedSubnet := fs.String("t", "", "network subnet in CIDR notation (e.g. 192.168.1.0/24)")
+	grpcAddr := fs.String("grpc-addr", ":50051", "gRPC server address")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, fmt.Errorf("failed to parse flags: %w", err)
@@ -181,6 +189,7 @@ func NewServerConfig(args []string) (*ServerConfig, error) {
 		AuditURL:         *auditURL,
 		PrivateCryptoKey: *crypto,
 		TrustedSubnet:    *trustedSubnet,
+		GRPCAddress:      *grpcAddr,
 	}
 
 	// 1. JSON
@@ -226,6 +235,9 @@ func NewServerConfig(args []string) (*ServerConfig, error) {
 			cfg.AuditURL = *auditURL
 		case "crypto-key":
 			cfg.PrivateCryptoKey = *crypto
+		case "grpc-addr":
+			cfg.GRPCAddress = *grpcAddr
+
 		}
 	})
 

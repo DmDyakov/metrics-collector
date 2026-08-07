@@ -8,8 +8,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"metrics-collector/internal/app"
 	"metrics-collector/internal/config"
+	"metrics-collector/internal/server/app"
 	"metrics-collector/pkg/buildinfo"
 	"metrics-collector/pkg/logger"
 	"metrics-collector/pkg/pprof"

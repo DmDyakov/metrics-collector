@@ -37,10 +37,13 @@ func main() {
 	}
 
 	if cfg == nil {
-		logger.Fatal("Config is nil")
+		logger.Fatal("config is nil")
 	}
 
-	agent := agent.NewAgent(cfg, logger)
+	agent, err := agent.New(cfg, logger)
+	if err != nil {
+		logger.Fatal("failed to create agent", zap.Error(err))
+	}
 
 	if err := agent.Run(ctx); err != nil {
 		logger.Fatal("agent stopped with error", zap.Error(err))

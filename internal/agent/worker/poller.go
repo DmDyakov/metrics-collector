@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand/v2"
-	models "metrics-collector/internal/model"
+	models "metrics-collector/internal/server/model"
 	"time"
 
 	"runtime"
