@@ -1,17 +1,16 @@
 package grpc
 
 import (
+	"metrics-collector/internal/domain/metrics"
 	pb "metrics-collector/internal/proto"
 )
 
-const pollCount = "PollCount"
-
 // toProto конвертирует map[string]float64 в слайс pb.Metric для gRPC.
-func toProto(metrics map[string]float64) []*pb.Metric {
-	result := make([]*pb.Metric, 0, len(metrics))
+func toProto(batch map[string]float64) []*pb.Metric {
+	result := make([]*pb.Metric, 0, len(batch))
 
-	for k, v := range metrics {
-		if k == pollCount {
+	for k, v := range batch {
+		if k == metrics.PollCount {
 			delta := int64(v)
 			result = append(result, pb.Metric_builder{
 				Id:    k,
