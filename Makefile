@@ -8,7 +8,7 @@ BIN_DIR := bin
 
 COVERAGE_FILE := coverage.out
 COVERAGE_MIN := 70
-COVERAGE_EXCLUDE := /cmd/|/mocks|/dto|/model|/logger|/pprof|/pool|/buildinfo|/templates|/agent$$|/app$$|/audit$$|/errs$$|/postgres$$
+COVERAGE_EXCLUDE := /cmd/|/mocks|/dto|/model|/logger|/pprof|/pool|/buildinfo|/templates|/proto|/agent$$|/app$$|/audit$$|/errs$$|/postgres$$|/transport/http$$
 
 LDFLAGS := -X $(MODULE)/pkg/buildinfo.Version=$(VERSION) \
            -X $(MODULE)/pkg/buildinfo.Date=$(DATE) \

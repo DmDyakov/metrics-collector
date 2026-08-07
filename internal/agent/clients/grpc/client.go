@@ -15,6 +15,8 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
+//go:generate mockgen -destination=mocks/mock_metrics_client.go -package=mocks metrics-collector/internal/proto MetricsClient
+
 // Client — gRPC-клиент для отправки метрик.
 type Client struct {
 	conn   *grpc.ClientConn

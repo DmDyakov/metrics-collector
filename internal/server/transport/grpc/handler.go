@@ -12,6 +12,8 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+//go:generate mockgen -destination=mocks/mock_metrics_service.go -package=mocks metrics-collector/internal/server/transport/grpc MetricsService
+
 // MetricsService — интерфейс бизнес-логики.
 type MetricsService interface {
 	UpdateMetrics(ctx context.Context, batch []models.Metrics) (*int, error)
