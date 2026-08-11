@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	"go.uber.org/zap"
@@ -18,8 +19,10 @@ type ReporterStore interface {
 //go:generate mockgen -destination=mocks/mock_client.go -package=mocks . Client
 type Client interface {
 	SendMetrics(ctx context.Context, metrics map[string]float64) error
+	io.Closer
 }
 
+// Reporter периодически отправляет метрики на сервер через пул воркеров.
 type Reporter struct {
 	client Client
 	store  ReporterStore
@@ -30,6 +33,7 @@ type Reporter struct {
 	workers        int
 }
 
+// NewReporter создаёт Reporter.
 func NewReporter(s ReporterStore, c Client, l *zap.Logger, workers int, reportInterval int) *Reporter {
 	return &Reporter{
 		client:         c,
@@ -41,6 +45,7 @@ func NewReporter(s ReporterStore, c Client, l *zap.Logger, workers int, reportIn
 	}
 }
 
+// Run запускает пул воркеров и планировщик отправки метрик.
 func (r *Reporter) Run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -67,6 +72,7 @@ func (r *Reporter) Run(ctx context.Context) error {
 	return nil
 }
 
+// worker отправляет метрики из очереди на сервер.
 func (r *Reporter) worker(ctx context.Context, id int) error {
 	for {
 		select {
@@ -87,6 +93,7 @@ func (r *Reporter) worker(ctx context.Context, id int) error {
 	}
 }
 
+// scheduler периодически снимает снапшот метрик и отправляет в очередь.
 func (r *Reporter) scheduler(ctx context.Context) error {
 	ticker := time.NewTicker(time.Duration(r.reportInterval) * time.Second)
 	defer ticker.Stop()

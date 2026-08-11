@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"metrics-collector/internal/server/audit"
+	"metrics-collector/internal/domain/audit"
 	"metrics-collector/internal/server/transport/http/middleware/mocks"
 
 	"github.com/go-chi/chi/v5"
@@ -24,7 +24,7 @@ func TestWithAudit(t *testing.T) {
 
 		var receivedEvent audit.Event
 		mockPub := mocks.NewMockAuditPublisher(ctrl)
-		mockPub.EXPECT().Notify(gomock.Any()).Do(func(e audit.Event) {
+		mockPub.EXPECT().Publish(gomock.Any()).Do(func(e audit.Event) {
 			receivedEvent = e
 		})
 
@@ -55,7 +55,7 @@ func TestWithAudit(t *testing.T) {
 
 		var receivedEvent audit.Event
 		mockPub := mocks.NewMockAuditPublisher(ctrl)
-		mockPub.EXPECT().Notify(gomock.Any()).Do(func(e audit.Event) {
+		mockPub.EXPECT().Publish(gomock.Any()).Do(func(e audit.Event) {
 			receivedEvent = e
 		})
 
@@ -86,7 +86,7 @@ func TestWithAudit(t *testing.T) {
 
 		var receivedEvent audit.Event
 		mockPub := mocks.NewMockAuditPublisher(ctrl)
-		mockPub.EXPECT().Notify(gomock.Any()).Do(func(e audit.Event) {
+		mockPub.EXPECT().Publish(gomock.Any()).Do(func(e audit.Event) {
 			receivedEvent = e
 		})
 

@@ -13,34 +13,55 @@ import (
 	"google.golang.org/grpc"
 )
 
-// New создаёт gRPC-сервер.
-func New(addr string, trustedSubnet string, handler *Handler, logger *zap.Logger) (*grpc.Server, error) {
-	listener, err := net.Listen("tcp", addr)
+type Server struct {
+	*grpc.Server
+	addr   string
+	logger *zap.Logger
+}
+
+// NewServer создаёт gRPC-сервер и регистрирует обработчик
+func NewServer(addr string, cidr string, handler *Handler, logger *zap.Logger) (*Server, error) {
+
+	trustedSubnet, err := middleware.ParseCIDR(cidr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to listen on %s: %w", addr, err)
+		return nil, fmt.Errorf("gRPC server failed to parse cidr: %w", err)
 	}
 
 	s := grpc.NewServer(
 		grpc.UnaryInterceptor(middleware.TrustedSubnetInterceptor(trustedSubnet, logger)),
 	)
-
 	pb.RegisterMetricsServer(s, handler)
 
-	go func() {
-		if err := s.Serve(listener); err != nil {
-			logger.Error("gRPC server failed", zap.Error(err))
-		}
-	}()
-
-	logger.Info("gRPC server started", zap.String("addr", addr))
-
-	return s, nil
+	return &Server{
+		Server: s,
+		addr:   addr,
+		logger: logger,
+	}, nil
 }
 
-// Run ждёт сигнала и глушит сервер.
-func Run(ctx context.Context, s *grpc.Server, logger *zap.Logger) error {
-	<-ctx.Done()
-	logger.Info("Shutting down gRPC server...")
-	s.GracefulStop()
+// Run запускает сервер.
+func (s *Server) Run(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+
+	listener, err := net.Listen("tcp", s.addr)
+	if err != nil {
+		return fmt.Errorf("gRPC server failed to listen: %w", err)
+	}
+
+	s.logger.Info("gRPC server started", zap.String("addr", s.addr))
+
+	go func() {
+		<-ctx.Done()
+		s.logger.Info("Shutting down gRPC server...")
+		s.GracefulStop()
+	}()
+
+	if err := s.Serve(listener); err != nil && err != grpc.ErrServerStopped {
+		return fmt.Errorf("gRPC server error: %w", err)
+	}
+
+	s.logger.Info("gRPC server stopped gracefully")
 	return nil
 }

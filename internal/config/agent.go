@@ -5,27 +5,29 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/caarlos0/env/v11"
 )
 
 type AgentConfig struct {
-	PollInterval    int    `env:"POLL_INTERVAL" json:"poll_interval"`
-	ReportInterval  int    `env:"REPORT_INTERVAL" json:"report_interval"`
-	HTTPAddress     string `env:"ADDRESS" json:"address"`
-	GRPCAddress     string `env:"GRPC_ADDRESS" json:"grpc_address"`
-	SecretKey       string `env:"KEY" json:"key"`
-	PublicCryptoKey string `env:"CRYPTO_KEY" json:"crypto_key"`
-	RateLimit       int    `env:"RATE_LIMIT" json:"rate_limit"`
-	AgentIP         string `env:"AGENT_IP" json:"agent_ip"`
+	PollInterval    int           `env:"POLL_INTERVAL" json:"poll_interval"`
+	ReportInterval  int           `env:"REPORT_INTERVAL" json:"report_interval"`
+	HTTPAddress     string        `env:"ADDRESS" json:"address"`
+	GRPCAddress     string        `env:"GRPC_ADDRESS" json:"grpc_address"`
+	SecretKey       string        `env:"KEY" json:"key"`
+	PublicCryptoKey string        `env:"CRYPTO_KEY" json:"crypto_key"`
+	RateLimit       int           `env:"RATE_LIMIT" json:"rate_limit"`
+	AgentIP         string        `env:"AGENT_IP" json:"agent_ip"`
+	ShutdownTimeout time.Duration `env:"SHUTDOWN_TIMEOUT" json:"shutdown_timeout"`
 }
 
 const (
-	defaultServerBaseURL  = "localhost:8080"
-	defaultPollInterval   = 2
-	defaultReportInterval = 10
-	defaultSecretKey      = ""
-	defaultRateLimit      = 2
+	defaultServerBaseURL        = "localhost:8080"
+	defaultPollInterval         = 2
+	defaultReportInterval       = 10
+	defaultRateLimit            = 2
+	defaultAgentShutdownTimeout = 10 * time.Second
 )
 
 func NewAgentConfig(args []string) (*AgentConfig, error) {
@@ -38,10 +40,11 @@ func NewAgentConfig(args []string) (*AgentConfig, error) {
 	addr := fs.String("a", defaultServerBaseURL, "address and port")
 	poll := fs.Int("p", defaultPollInterval, "poll interval")
 	report := fs.Int("r", defaultReportInterval, "report interval")
-	key := fs.String("k", defaultSecretKey, "secret key")
+	key := fs.String("k", "", "secret key")
 	limit := fs.Int("l", defaultRateLimit, "rate limit")
 	crypto := fs.String("crypto-key", "", "path to public key")
-	grpcAddr := fs.String("grpc-addr", ":50051", "gRPC server address")
+	grpcAddr := fs.String("grpc-addr", "", "gRPC server address")
+	shutTimeout := fs.Duration("s", defaultAgentShutdownTimeout, "shutdown timeout")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, fmt.Errorf("failed to parse flags: %w", err)
@@ -55,6 +58,7 @@ func NewAgentConfig(args []string) (*AgentConfig, error) {
 		RateLimit:       *limit,
 		PublicCryptoKey: *crypto,
 		GRPCAddress:     *grpcAddr,
+		ShutdownTimeout: *shutTimeout,
 	}
 
 	if configPath == "" {

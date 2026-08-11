@@ -48,6 +48,14 @@ func New(
 	}
 }
 
+// Close закрывает idle-соединения HTTP-клиента.
+func (c *Client) Close() error {
+	if c.httpClient != nil {
+		c.httpClient.CloseIdleConnections()
+	}
+	return nil
+}
+
 func (c *Client) SendMetrics(ctx context.Context, batch map[string]float64) error {
 	if len(batch) <= 0 {
 		c.logger.Warn("No metrics for send")

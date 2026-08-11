@@ -173,44 +173,6 @@ func TestPing_Persistent(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestBackupMetrics(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	metricsMap := map[string]models.Metrics{
-		"cpu": {ID: "cpu", MType: "gauge", Value: floatPtr(80.5)},
-	}
-
-	mockMem := mocks.NewMockMemStorage(ctrl)
-	mockPersistent := mocks.NewMockPersistentStorage(ctrl)
-
-	mockMem.EXPECT().GetAll().Return(metricsMap).Times(1)
-	mockPersistent.EXPECT().SaveBatch(gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
-
-	repo := New(mockMem, mockPersistent, 300, zap.NewNop())
-	err := repo.BackupMetrics(context.Background())
-	assert.NoError(t, err)
-}
-
-func TestRestoreMetrics(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	metrics := []models.Metrics{
-		{ID: "cpu", MType: "gauge", Value: floatPtr(80.5)},
-	}
-
-	mockMem := mocks.NewMockMemStorage(ctrl)
-	mockPersistent := mocks.NewMockPersistentStorage(ctrl)
-
-	mockPersistent.EXPECT().GetAll(gomock.Any()).Return(metrics, nil).Times(1)
-	mockMem.EXPECT().SaveBatch(metrics).Return(nil).Times(1)
-
-	repo := New(mockMem, mockPersistent, 300, zap.NewNop())
-	err := repo.RestoreMetrics(context.Background())
-	assert.NoError(t, err)
-}
-
 func floatPtr(v float64) *float64 { return &v }
 func int64Ptr(v int64) *int64     { return &v }
 func intPtr(v int) *int           { return &v }

@@ -45,6 +45,14 @@ func New(cfg *config.AgentConfig, logger *zap.Logger) (*Client, error) {
 	}, nil
 }
 
+// Close закрывает gRPC соединение.
+func (c *Client) Close() error {
+	if c.conn != nil {
+		return c.conn.Close()
+	}
+	return nil
+}
+
 // SendMetrics отправляет метрики на сервер по gRPC.
 func (c *Client) SendMetrics(ctx context.Context, batch map[string]float64) error {
 	if len(batch) == 0 {

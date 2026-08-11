@@ -10,7 +10,7 @@
 package mocks
 
 import (
-	audit "metrics-collector/internal/server/audit"
+	audit "metrics-collector/internal/domain/audit"
 	reflect "reflect"
 
 	gomock "go.uber.org/mock/gomock"
@@ -40,14 +40,14 @@ func (m *MockAuditPublisher) EXPECT() *MockAuditPublisherMockRecorder {
 	return m.recorder
 }
 
-// Notify mocks base method.
-func (m *MockAuditPublisher) Notify(event audit.Event) {
+// Publish mocks base method.
+func (m *MockAuditPublisher) Publish(event audit.Event) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Notify", event)
+	m.ctrl.Call(m, "Publish", event)
 }
 
-// Notify indicates an expected call of Notify.
-func (mr *MockAuditPublisherMockRecorder) Notify(event any) *gomock.Call {
+// Publish indicates an expected call of Publish.
+func (mr *MockAuditPublisherMockRecorder) Publish(event any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Notify", reflect.TypeOf((*MockAuditPublisher)(nil).Notify), event)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Publish", reflect.TypeOf((*MockAuditPublisher)(nil).Publish), event)
 }

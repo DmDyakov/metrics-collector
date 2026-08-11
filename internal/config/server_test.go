@@ -16,7 +16,6 @@ func TestNewServerConfig_Defaults(t *testing.T) {
 	assert.Equal(t, 20, cfg.StoreInterval)
 	assert.Equal(t, 5*time.Second, cfg.RequestTimeout)
 	assert.Equal(t, 10*time.Second, cfg.ShutdownTimeout)
-	assert.Equal(t, ":50051", cfg.GRPCAddress)
 }
 
 func TestNewServerConfig_StoreIntervalNegative(t *testing.T) {

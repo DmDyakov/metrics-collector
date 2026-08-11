@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"metrics-collector/internal/server/audit"
+	"metrics-collector/internal/domain/audit"
 	models "metrics-collector/internal/server/model"
 
 	"github.com/go-chi/chi/v5"
@@ -17,7 +17,7 @@ import (
 
 //go:generate mockgen -destination=mocks/audit_publisher.go -package=mocks . AuditPublisher
 type AuditPublisher interface {
-	Notify(event audit.Event)
+	Publish(event audit.Event)
 }
 
 type auditResponseWriter struct {
@@ -71,7 +71,7 @@ func WithAudit(logger *zap.Logger, publisher AuditPublisher) func(next http.Hand
 				return
 			}
 
-			publisher.Notify(audit.Event{
+			publisher.Publish(audit.Event{
 				Timestamp: start.Unix(),
 				Metrics:   metrics,
 				IPAddress: r.RemoteAddr,

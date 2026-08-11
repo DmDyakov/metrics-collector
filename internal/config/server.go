@@ -29,9 +29,7 @@ type ServerConfig struct {
 
 const (
 	defaultStoreInterval   = 20
-	defaultFileStoragePath = ""
 	defaultRestore         = false
-	defaultDatabaseDSN     = ""
 	defaultRequestTimeout  = 5 * time.Second
 	defaultShutdownTimeout = 10 * time.Second
 )
@@ -45,9 +43,9 @@ func NewServerConfig(args []string) (*ServerConfig, error) {
 
 	addr := fs.String("a", "localhost:8080", "address and port")
 	store := fs.Int("i", defaultStoreInterval, "store interval")
-	file := fs.String("f", defaultFileStoragePath, "file storage path")
+	file := fs.String("f", "", "file storage path")
 	restore := fs.Bool("r", defaultRestore, "restore")
-	dsn := fs.String("d", defaultDatabaseDSN, "database DSN")
+	dsn := fs.String("d", "", "database DSN")
 	key := fs.String("k", "", "secret key")
 	reqTimeout := fs.Duration("rt", defaultRequestTimeout, "request timeout")
 	shutTimeout := fs.Duration("s", defaultShutdownTimeout, "shutdown timeout")
@@ -55,7 +53,7 @@ func NewServerConfig(args []string) (*ServerConfig, error) {
 	auditURL := fs.String("audit-url", "", "audit url")
 	crypto := fs.String("crypto-key", "", "path to private key")
 	trustedSubnet := fs.String("t", "", "network subnet in CIDR notation")
-	grpcAddr := fs.String("grpc-addr", ":50051", "gRPC server address")
+	grpcAddr := fs.String("grpc-addr", "", "gRPC server address")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, fmt.Errorf("failed to parse flags: %w", err)

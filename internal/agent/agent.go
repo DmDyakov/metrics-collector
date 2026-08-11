@@ -4,6 +4,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"io"
 	grpcclient "metrics-collector/internal/agent/clients/grpc"
 	httpclient "metrics-collector/internal/agent/clients/http"
 	"metrics-collector/internal/agent/store"
@@ -20,6 +21,7 @@ import (
 type Agent struct {
 	cfg      *config.AgentConfig
 	logger   *zap.Logger
+	client   io.Closer
 	store    *store.Store
 	poller   *worker.Poller
 	reporter *worker.Reporter
@@ -27,29 +29,9 @@ type Agent struct {
 
 // New creates a new agent with the given configuration.
 func New(cfg *config.AgentConfig, logger *zap.Logger) (*Agent, error) {
-
-	var client worker.Client
-	var err error
-
-	if cfg.GRPCAddress != "" {
-		client, err = grpcclient.New(cfg, logger)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create gRPC client: %w", err)
-		}
-		logger.Info("Using gRPC client", zap.String("addr", cfg.GRPCAddress))
-
-	} else {
-		gzip := compress.NewGzip()
-		signer, err := signer.New(cfg.SecretKey)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create signer: %w", err)
-		}
-		encryptor, err := encryptor.New(cfg.PublicCryptoKey, "")
-		if err != nil {
-			return nil, fmt.Errorf("failed to load public key: %w", err)
-		}
-		client = httpclient.New(cfg.HTTPAddress, cfg.AgentIP, logger, signer, encryptor, gzip)
-		logger.Info("Using HTTP client", zap.String("addr", cfg.HTTPAddress))
+	client, err := newClient(cfg, logger)
+	if err != nil {
+		return nil, err
 	}
 
 	store := store.New()
@@ -59,6 +41,7 @@ func New(cfg *config.AgentConfig, logger *zap.Logger) (*Agent, error) {
 	return &Agent{
 		cfg:      cfg,
 		logger:   logger,
+		client:   client,
 		store:    store,
 		poller:   poller,
 		reporter: reporter,
@@ -66,6 +49,8 @@ func New(cfg *config.AgentConfig, logger *zap.Logger) (*Agent, error) {
 }
 
 func (a *Agent) Run(ctx context.Context) error {
+	defer a.client.Close()
+
 	a.logger.Info("Starting agent",
 		zap.Int("rate_limit", a.cfg.RateLimit),
 		zap.Int("poll_interval", a.cfg.PollInterval),
@@ -75,18 +60,41 @@ func (a *Agent) Run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
-		a.logger.Info("Starting poller")
 		return a.poller.Run(ctx)
 	})
 
 	g.Go(func() error {
-		a.logger.Info("Starting reporter")
 		return a.reporter.Run(ctx)
 	})
 
-	if err := g.Wait(); err != nil && err != context.Canceled {
-		return err
-	}
+	return g.Wait()
+}
 
-	return nil
+func newClient(cfg *config.AgentConfig, logger *zap.Logger) (worker.Client, error) {
+	switch {
+	case cfg.GRPCAddress != "":
+		client, err := grpcclient.New(cfg, logger)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create gRPC client: %w", err)
+		}
+		logger.Info("Using gRPC client", zap.String("addr", cfg.GRPCAddress))
+		return client, nil
+
+	default:
+		gzip := compress.NewGzip()
+
+		signer, err := signer.New(cfg.SecretKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create signer: %w", err)
+		}
+
+		encryptor, err := encryptor.New(cfg.PublicCryptoKey, "")
+		if err != nil {
+			return nil, fmt.Errorf("failed to load public key: %w", err)
+		}
+
+		client := httpclient.New(cfg.HTTPAddress, cfg.AgentIP, logger, signer, encryptor, gzip)
+		logger.Info("Using HTTP client", zap.String("addr", cfg.HTTPAddress))
+		return client, nil
+	}
 }

@@ -13,9 +13,10 @@ import (
 )
 
 // TrustedSubnetInterceptor проверяет, что IP агента принадлежит доверенной подсети.
-func TrustedSubnetInterceptor(cidr string, logger *zap.Logger) grpc.UnaryServerInterceptor {
+// subnet может быть nil — тогда проверка отключена.
+func TrustedSubnetInterceptor(subnet *net.IPNet, logger *zap.Logger) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		if cidr == "" {
+		if subnet == nil {
 			return handler(ctx, req)
 		}
 
@@ -37,20 +38,28 @@ func TrustedSubnetInterceptor(cidr string, logger *zap.Logger) grpc.UnaryServerI
 			return nil, status.Error(codes.PermissionDenied, "invalid x-real-ip")
 		}
 
-		_, subnet, err := net.ParseCIDR(cidr)
-		if err != nil {
-			logger.Error("invalid trusted subnet", zap.String("subnet", cidr), zap.Error(err))
-			return nil, status.Error(codes.Internal, "invalid trusted subnet configuration")
-		}
-
 		if !subnet.Contains(clientIP) {
 			logger.Warn("IP not in trusted subnet",
 				zap.String("client_ip", clientIP.String()),
-				zap.String("trusted_subnet", cidr),
+				zap.String("trusted_subnet", subnet.String()),
 			)
 			return nil, status.Error(codes.PermissionDenied, "ip not in trusted subnet")
 		}
 
 		return handler(ctx, req)
 	}
+}
+
+// ParseCIDR парсит CIDR-нотацию и возвращает *net.IPNet.
+// Возвращает nil, если cidr пустая строка.
+func ParseCIDR(cidr string) (*net.IPNet, error) {
+	if cidr == "" {
+		return nil, nil
+	}
+
+	_, subnet, err := net.ParseCIDR(cidr)
+	if err != nil {
+		return nil, err
+	}
+	return subnet, nil
 }

@@ -8,10 +8,12 @@ import (
 	"time"
 
 	"metrics-collector/internal/config"
-	"metrics-collector/internal/server/audit"
+	"metrics-collector/internal/domain/audit"
+
 	"metrics-collector/internal/server/transport/http/handler"
 	"metrics-collector/internal/server/transport/http/middleware"
 	"metrics-collector/pkg/encryptor"
+	"metrics-collector/pkg/publisher"
 	"metrics-collector/pkg/signer"
 
 	"github.com/go-chi/chi/v5"
@@ -19,16 +21,22 @@ import (
 	"go.uber.org/zap"
 )
 
-// New создаёт HTTP-сервер с настроенными маршрутами и middleware.
-func New(
+type Server struct {
+	*http.Server
+	logger          *zap.Logger
+	shutdownTimeout time.Duration
+}
+
+// NewServer создаёт HTTP-сервер с настроенными маршрутами и middleware.
+func NewServer(
 	cfg *config.ServerConfig,
 	healthHandler *handler.HealthHandler,
 	metricsHandler *handler.MetricsHandler,
-	auditPublisher *audit.Publisher,
+	auditPub *publisher.Publisher[audit.Event],
 	signer *signer.Signer,
 	enc *encryptor.Encryptor,
 	logger *zap.Logger,
-) *http.Server {
+) *Server {
 	r := chi.NewRouter()
 	r.Use(chimw.StripSlashes)
 	r.Use(middleware.WithTimeout(cfg.RequestTimeout))
@@ -48,8 +56,8 @@ func New(
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.WithTrustedSubnet(cfg.TrustedSubnet))
 
-		if auditPublisher != nil {
-			r.Use(middleware.WithAudit(logger, auditPublisher))
+		if auditPub != nil {
+			r.Use(middleware.WithAudit(logger, auditPub))
 		}
 
 		r.Post("/update/{type}/{name}/{value}", metricsHandler.UpdateMetricByURL)
@@ -57,28 +65,39 @@ func New(
 		r.Post("/updates", metricsHandler.UpdateMetricsBatch)
 	})
 
-	return &http.Server{
+	srv := &http.Server{
 		Addr:         cfg.HTTPAddress,
 		Handler:      r,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  30 * time.Second,
 	}
+
+	return &Server{
+		Server:          srv,
+		logger:          logger,
+		shutdownTimeout: 5 * time.Second,
+	}
 }
 
-// Run запускает HTTP-сервер и graceful shutdown.
-func Run(ctx context.Context, srv *http.Server, shutdownTimeout time.Duration, logger *zap.Logger) error {
-	logger.Info("HTTP server started", zap.String("addr", srv.Addr))
+// Run запускает HTTP-сервер.
+func (s *Server) Run(ctx context.Context) error {
+	s.logger.Info("HTTP server started", zap.String("addr", s.Addr))
 
 	go func() {
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Error("HTTP server failed", zap.Error(err))
+		if err := s.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			s.logger.Error("HTTP server failed", zap.Error(err))
 		}
 	}()
 
 	<-ctx.Done()
-	logger.Info("Shutting down HTTP server...")
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	s.logger.Info("Shutting down HTTP server...")
+	shCtx, cancel := context.WithTimeout(context.Background(), s.shutdownTimeout)
 	defer cancel()
-	return srv.Shutdown(shutdownCtx)
+
+	if err := s.Shutdown(shCtx); err != nil {
+		s.logger.Error("HTTP server failed to shutdown", zap.Error(err))
+	}
+	s.logger.Info("HTTP server stopped gracefully")
+	return nil
 }

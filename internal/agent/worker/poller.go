@@ -20,30 +20,34 @@ type PollerStore interface {
 	UpdateMetrics(metrics map[string]float64)
 }
 
+// Poller периодически собирает метрики системы и сохраняет в хранилище.
 type Poller struct {
 	store        PollerStore
 	logger       *zap.Logger
-	pollInterval int
+	pollInterval time.Duration
 }
 
+// NewPoller создаёт Poller.
 func NewPoller(s PollerStore, l *zap.Logger, pollInterval int) *Poller {
 	return &Poller{
 		store:        s,
 		logger:       l,
-		pollInterval: pollInterval,
+		pollInterval: time.Duration(pollInterval) * time.Second,
 	}
 }
 
+// Run запускает периодический сбор метрик.
 func (p *Poller) Run(ctx context.Context) error {
-	ticker := time.NewTicker(time.Duration(p.pollInterval) * time.Second)
+	ticker := time.NewTicker(p.pollInterval)
 	defer ticker.Stop()
 	var count int64
+	p.logger.Info("Poller started", zap.Duration("interval", p.pollInterval))
 
 	for {
 		select {
 		case <-ctx.Done():
 			p.logger.Info("Poller stopped")
-			return ctx.Err()
+			return nil
 		case <-ticker.C:
 			count++
 			p.logger.Info("Poll runtime metrics",
@@ -57,6 +61,7 @@ func (p *Poller) Run(ctx context.Context) error {
 	}
 }
 
+// collectMemStats собирает метрики runtime.MemStats.
 func (p *Poller) pollMemStats(count int64) {
 	var memStats runtime.MemStats
 
@@ -95,6 +100,7 @@ func (p *Poller) pollMemStats(count int64) {
 	})
 }
 
+// collectVirtualMemory собирает метрики виртуальной памяти.
 func (p *Poller) pollVirtualMemoryInfo() {
 	memInfo, err := mem.VirtualMemory()
 	if err != nil {
@@ -108,6 +114,7 @@ func (p *Poller) pollVirtualMemoryInfo() {
 	})
 }
 
+// collectCPUPercent собирает метрики загрузки CPU.
 func (p *Poller) pollCPUPercentsInfo() {
 	cpuPercents, err := cpu.Percent(0, true)
 	if err != nil {

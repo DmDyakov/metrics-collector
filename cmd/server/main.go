@@ -11,6 +11,7 @@ import (
 	"metrics-collector/internal/config"
 	"metrics-collector/internal/server/app"
 	"metrics-collector/pkg/buildinfo"
+	"metrics-collector/pkg/lifecycle"
 	"metrics-collector/pkg/logger"
 	"metrics-collector/pkg/pprof"
 
@@ -38,10 +39,6 @@ func main() {
 		logger.Fatal("failed to create config: %v", zap.Error(err))
 	}
 
-	if cfg == nil {
-		logger.Fatal("config is nil")
-	}
-
 	app, err := app.New(cfg, logger)
 	if err != nil {
 		logger.Fatal("failed to create app: %v", zap.Error(err))
@@ -56,7 +53,9 @@ func main() {
 		}()
 	}
 
-	if err := app.Run(ctx); err != nil {
-		logger.Fatal("server app failed: %v", zap.Error(err))
+	if err := lifecycle.Run(ctx, app, cfg.ShutdownTimeout); err != nil {
+		logger.Fatal("app terminated with error", zap.Error(err))
 	}
+
+	logger.Info("App stopped gracefully")
 }

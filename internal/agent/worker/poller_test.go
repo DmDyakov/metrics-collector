@@ -3,7 +3,6 @@ package worker
 import (
 	"context"
 	"testing"
-	"time"
 
 	"metrics-collector/internal/agent/worker/mocks"
 
@@ -49,23 +48,19 @@ func TestPoller_PollCPUPercentsInfo(t *testing.T) {
 }
 
 func TestPoller_Run(t *testing.T) {
-	t.Run("stops on context cancel", func(t *testing.T) {
-		poller, mockStore := setupPollerTest(t)
+	t.Run("stops_on_context_cancel", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
 
-		mockStore.EXPECT().
-			UpdateMetrics(gomock.Any()).
-			AnyTimes()
+		store := mocks.NewMockPollerStore(ctrl)
 
-		// Используем канал для синхронизации
+		poller := NewPoller(store, zap.NewNop(), 1)
+
 		ctx, cancel := context.WithCancel(context.Background())
-
-		go func() {
-			time.Sleep(500 * time.Millisecond)
-			cancel()
-		}()
+		cancel()
 
 		err := poller.Run(ctx)
-		assert.ErrorIs(t, err, context.Canceled)
+		assert.NoError(t, err)
 	})
 }
 

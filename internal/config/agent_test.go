@@ -17,7 +17,6 @@ func TestNewAgentConfig_Defaults(t *testing.T) {
 	assert.Equal(t, 2, cfg.PollInterval)
 	assert.Equal(t, 10, cfg.ReportInterval)
 	assert.Equal(t, 2, cfg.RateLimit)
-	assert.Equal(t, ":50051", cfg.GRPCAddress)
 }
 func TestNewAgentConfig_AddressRequired(t *testing.T) {
 	os.Unsetenv("ADDRESS")
