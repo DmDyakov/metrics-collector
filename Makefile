@@ -7,16 +7,12 @@ COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BIN_DIR := bin
 
 COVERAGE_FILE := coverage.out
-COVERAGE_MIN := 50
-COVERAGE_EXCLUDE := /cmd/|/mocks|/dto|/model|/logger|/pprof|/pool|/buildinfo|/templates|/agent$$|/app$$|/audit$$|/errs$$|/postgres$$
+COVERAGE_MIN := 70
+COVERAGE_EXCLUDE := /cmd/|/mocks|/dto|/model|/logger|/pprof|/pool|/buildinfo|/templates|/proto|/agent$$|/app$$|/audit$$|/errs$$|/postgres$$|/transport/http$$
 
 LDFLAGS := -X $(MODULE)/pkg/buildinfo.Version=$(VERSION) \
            -X $(MODULE)/pkg/buildinfo.Date=$(DATE) \
            -X $(MODULE)/pkg/buildinfo.Commit=$(COMMIT)
-
-.PHONY: generate
-generate:
-	go generate ./...
 
 .PHONY: test
 test:
@@ -59,6 +55,10 @@ run-agent:
 lint:
 	golangci-lint run ./...
 
+.PHONY: staticlint
+staticlint:
+	go run ./cmd/staticlint/ ./...
+
 .PHONY: fmt
 fmt:
 	gofmt -s -w .
@@ -74,7 +74,7 @@ clean:
 	rm -rf $(BIN_DIR) $(COVERAGE_FILE)
 
 .PHONY: all
-all: fmt lint test-coverage build-all
+all: fmt lint staticlint test-coverage build-all
 
 .PHONY: genkeys test-genkeys all-genkeys
 KEY_SIZE := 8192
@@ -91,3 +91,20 @@ test-genkeys:
 	done
 
 all-genkeys: test-keys keys
+
+.PHONY: proto
+proto:
+	protoc \
+		--go_out=. --go_opt=module=$(MODULE) \
+		--go-grpc_out=. --go-grpc_opt=module=$(MODULE) \
+		--go_opt=default_api_level=API_OPAQUE \
+		api/metrics/v1/metrics.proto
+
+.PHONY: generate
+generate:
+	go generate ./...
+	protoc \
+		--go_out=. --go_opt=module=$(MODULE) \
+		--go-grpc_out=. --go-grpc_opt=module=$(MODULE) \
+		--go_opt=default_api_level=API_OPAQUE \
+		api/metrics/v1/metrics.proto

@@ -22,7 +22,7 @@ func TestAgent_Integration(t *testing.T) {
 	cfg := &config.AgentConfig{
 		PollInterval:   1,
 		ReportInterval: 1,
-		ServerBaseURL:  "localhost:0",
+		HTTPAddress:    "localhost:0",
 		RateLimit:      1,
 	}
 

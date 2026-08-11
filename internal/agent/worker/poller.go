@@ -5,10 +5,10 @@ import (
 	"context"
 	"fmt"
 	"math/rand/v2"
-	models "metrics-collector/internal/model"
+	"runtime"
 	"time"
 
-	"runtime"
+	"metrics-collector/internal/domain/metrics"
 
 	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/mem"
@@ -20,30 +20,34 @@ type PollerStore interface {
 	UpdateMetrics(metrics map[string]float64)
 }
 
+// Poller периодически собирает метрики системы и сохраняет в хранилище.
 type Poller struct {
 	store        PollerStore
 	logger       *zap.Logger
-	pollInterval int
+	pollInterval time.Duration
 }
 
+// NewPoller создаёт Poller.
 func NewPoller(s PollerStore, l *zap.Logger, pollInterval int) *Poller {
 	return &Poller{
 		store:        s,
 		logger:       l,
-		pollInterval: pollInterval,
+		pollInterval: time.Duration(pollInterval) * time.Second,
 	}
 }
 
+// Run запускает периодический сбор метрик.
 func (p *Poller) Run(ctx context.Context) error {
-	ticker := time.NewTicker(time.Duration(p.pollInterval) * time.Second)
+	ticker := time.NewTicker(p.pollInterval)
 	defer ticker.Stop()
 	var count int64
+	p.logger.Info("Poller started", zap.Duration("interval", p.pollInterval))
 
 	for {
 		select {
 		case <-ctx.Done():
 			p.logger.Info("Poller stopped")
-			return ctx.Err()
+			return nil
 		case <-ticker.C:
 			count++
 			p.logger.Info("Poll runtime metrics",
@@ -57,45 +61,46 @@ func (p *Poller) Run(ctx context.Context) error {
 	}
 }
 
+// collectMemStats собирает метрики runtime.MemStats.
 func (p *Poller) pollMemStats(count int64) {
 	var memStats runtime.MemStats
 
 	runtime.ReadMemStats(&memStats)
 
 	p.store.UpdateMetrics(map[string]float64{
-		models.PollCount:   float64(count),
-		models.RandomValue: rand.Float64(),
-		"Alloc":            float64(memStats.Alloc),
-		"BuckHashSys":      float64(memStats.BuckHashSys),
-		"Frees":            float64(memStats.Frees),
-		"GCCPUFraction":    memStats.GCCPUFraction,
-		"GCSys":            float64(memStats.GCSys),
-		"HeapAlloc":        float64(memStats.HeapAlloc),
-		"HeapIdle":         float64(memStats.HeapIdle),
-		"HeapInuse":        float64(memStats.HeapInuse),
-		"HeapObjects":      float64(memStats.HeapObjects),
-		"HeapReleased":     float64(memStats.HeapReleased),
-		"HeapSys":          float64(memStats.HeapSys),
-		"LastGC":           float64(memStats.LastGC),
-		"Lookups":          float64(memStats.Lookups),
-		"MCacheInuse":      float64(memStats.MCacheInuse),
-		"MCacheSys":        float64(memStats.MCacheSys),
-		"MSpanInuse":       float64(memStats.MSpanInuse),
-		"MSpanSys":         float64(memStats.MSpanSys),
-		"Mallocs":          float64(memStats.Mallocs),
-		"NextGC":           float64(memStats.NextGC),
-		"NumForcedGC":      float64(memStats.NumForcedGC),
-		"NumGC":            float64(memStats.NumGC),
-		"OtherSys":         float64(memStats.OtherSys),
-		"PauseTotalNs":     float64(memStats.PauseTotalNs),
-		"StackInuse":       float64(memStats.StackInuse),
-		"StackSys":         float64(memStats.StackSys),
-		"Sys":              float64(memStats.Sys),
-		"TotalAlloc":       float64(memStats.TotalAlloc),
+		metrics.PollCount:     float64(count),
+		metrics.RandomValue:   rand.Float64(),
+		metrics.Alloc:         float64(memStats.Alloc),
+		metrics.BuckHashSys:   float64(memStats.BuckHashSys),
+		metrics.Frees:         float64(memStats.Frees),
+		metrics.GCCPUFraction: memStats.GCCPUFraction,
+		metrics.GCSys:         float64(memStats.GCSys),
+		metrics.HeapAlloc:     float64(memStats.HeapAlloc),
+		metrics.HeapIdle:      float64(memStats.HeapIdle),
+		metrics.HeapInuse:     float64(memStats.HeapInuse),
+		metrics.HeapObjects:   float64(memStats.HeapObjects),
+		metrics.HeapReleased:  float64(memStats.HeapReleased),
+		metrics.HeapSys:       float64(memStats.HeapSys),
+		metrics.LastGC:        float64(memStats.LastGC),
+		metrics.Lookups:       float64(memStats.Lookups),
+		metrics.MCacheInuse:   float64(memStats.MCacheInuse),
+		metrics.MCacheSys:     float64(memStats.MCacheSys),
+		metrics.MSpanInuse:    float64(memStats.MSpanInuse),
+		metrics.MSpanSys:      float64(memStats.MSpanSys),
+		metrics.Mallocs:       float64(memStats.Mallocs),
+		metrics.NextGC:        float64(memStats.NextGC),
+		metrics.NumForcedGC:   float64(memStats.NumForcedGC),
+		metrics.NumGC:         float64(memStats.NumGC),
+		metrics.OtherSys:      float64(memStats.OtherSys),
+		metrics.PauseTotalNs:  float64(memStats.PauseTotalNs),
+		metrics.StackInuse:    float64(memStats.StackInuse),
+		metrics.StackSys:      float64(memStats.StackSys),
+		metrics.Sys:           float64(memStats.Sys),
+		metrics.TotalAlloc:    float64(memStats.TotalAlloc),
 	})
-
 }
 
+// collectVirtualMemory собирает метрики виртуальной памяти.
 func (p *Poller) pollVirtualMemoryInfo() {
 	memInfo, err := mem.VirtualMemory()
 	if err != nil {
@@ -104,11 +109,12 @@ func (p *Poller) pollVirtualMemoryInfo() {
 	}
 
 	p.store.UpdateMetrics(map[string]float64{
-		"TotalMemory": float64(memInfo.Total),
-		"FreeMemory":  float64(memInfo.Free),
+		metrics.TotalMemory: float64(memInfo.Total),
+		metrics.FreeMemory:  float64(memInfo.Free),
 	})
 }
 
+// collectCPUPercent собирает метрики загрузки CPU.
 func (p *Poller) pollCPUPercentsInfo() {
 	cpuPercents, err := cpu.Percent(0, true)
 	if err != nil {
